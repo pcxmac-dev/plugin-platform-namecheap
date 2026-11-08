@@ -10,7 +10,7 @@ def test_every_plugin_here_conforms_to_the_class_contract():
     found = assert_module_conforms(module)
     assert found and all(p.api == "2.1" and not p.is_record for p in found)
     assert {p.SYSTEM for p in found} == {"platform"} and {p.KIND for p in found} == {"machine"}
-    assert {p.ICON for p in found} == {"globe"}
+    assert {p.ICON for p in found} == {"namecheap"}
 
 
 def test_its_settings_are_pairs_named_by_their_variables_and_nothing_spends():
@@ -29,3 +29,14 @@ def test_its_settings_are_pairs_named_by_their_variables_and_nothing_spends():
     source = inspect.getsource(api)
     for spends in ("domains.create", "domains.renew", "domains.reactivate", "domains.transfer", "dns.setCustom", "dns.setDefault"):
         assert spends not in source  # no domain bought, renewed or moved, no nameserver changed
+
+
+def test_its_icon_is_its_makers_mark_drawn_by_the_library():
+    """Its icon in the platform's list and tray: Namecheap's N, a name the library's icons.js draws (the user,
+    2026-11-08: "for name cheap, use it's icon")."""
+    import re
+
+    from liminal_libs.ui import STATIC
+
+    drawn = set(re.findall(r"^\s*([a-z]+):\s*'", (STATIC / "icons.js").read_text(encoding="utf-8"), re.M))
+    assert {p.ICON for p in assert_module_conforms(module)} == {"namecheap"} and "namecheap" in drawn

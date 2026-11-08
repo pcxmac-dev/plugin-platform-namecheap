@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 (2026-11-08)
+
+Its icon is Namecheap's N, drawn in the library's line (liminal-libs 1.33.0's `namecheap`; the user: "for name cheap, use it's icon"). Needs liminal-libs>=1.33.0.
+
 ## 0.2.1 (2026-11-08)
 
 Its settings entered on the platform's page (the user: "i need a way to put my credentials in to the namecheap
