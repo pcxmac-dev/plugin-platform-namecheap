@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 (2026-11-08)
+
+Its settings entered on the platform's page (the user: "i need a way to put my credentials in to the namecheap
+plugin and allow it to function"): liminal-platform 0.9.0's Settings… keeps them through the platform's login, then
+calls `settings_changed`, which reads them anew at once (not after the 30 s they are otherwise kept). The README's
+setup says so.
+
 ## 0.2.0 (2026-11-08)
 
 Records set and removed from the platform's page, each with a confirmation, instead of only the command line (its forms:

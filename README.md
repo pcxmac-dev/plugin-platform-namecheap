@@ -53,10 +53,12 @@ what may happen to them ("Write anyway?"), and writes only on that second yes. A
    Dynamic DNS password is shown there (each domain has its own). Then add each host as an **A + Dynamic DNS
    Record** under Host Records (home, @ or *; any address: the first update replaces it). Dynamic DNS needs the
    domain on Namecheap's DNS (BasicDNS, PremiumDNS or FreeDNS) and keeps IPv4 (A) records alone.
-4. **Set the settings.** They are pairs the plugin asks of the login of the app it is attached to, each named by its
-   variable (NAMECHEAP_API_KEY is the pair `namecheap-api-key`). Today the platform's login is its environment: set
-   them as user environment variables, then start the platform again (it reads them when it starts). Once the
-   platform binds the login app, they are the signed-in user's pairs there instead.
+4. **Enter the settings**: on the platform's page, the plugin's **Settings…** (liminal-platform 0.9.0) asks for each
+   one below, the key and the Dynamic DNS password typed hidden; a field left empty keeps its value, and no value is
+   ever shown back. They are pairs the plugin asks of the login of the app it is attached to, each named by its
+   variable (NAMECHEAP_API_KEY is the pair `namecheap-api-key`): today the platform's login keeps them as your user
+   environment variables (so they hold across a restart), and the plugin reads them at once. Once the platform binds
+   the login app, they are the signed-in user's pairs there instead. Setting the variables yourself works too.
 
 | Variable | | |
 |---|---|---|

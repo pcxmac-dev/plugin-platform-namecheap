@@ -189,3 +189,21 @@ def test_the_platform_reads_it_in_its_own_shape(made, env):
     assert all(a["hook"] in hooks for a in st["actions"])
     flat = {k: v for k, v in st.items() if not isinstance(v, (list, dict))}
     assert all(isinstance(v, (str, bool)) for v in flat.values())
+
+
+def test_settings_entered_on_the_platforms_page_are_read_at_once(made):
+    """liminal-platform 0.9.0 keeps a plugin's settings through its login, then calls settings_changed: the settings
+    are read anew at once, not after the 30 s they are otherwise kept (the user: "i need a way to put my credentials in
+    to the namecheap plugin and allow it to function")."""
+    from liminal_libs.apps import EnvironmentLogin
+
+    p, fake, dns = made()
+    kept: dict[str, str] = {}
+    p.login = EnvironmentLogin(env=kept)  # as the platform lends its login to a plugin not yet attached
+    assert p.status()["valid"] is False and p.status()["why"].startswith("not set up")
+    for variable, value in settings_of().items():
+        p.login.save(variable, value)  # what the platform's settings route does
+    assert p.status()["valid"] is False  # still the settings read a moment ago
+    p.settings_changed()
+    st = p.status()
+    assert st["valid"] is True and "NAMECHEAP_API_KEY" in st["settingsSet"] and KEY not in str(st)  # named, never shown
