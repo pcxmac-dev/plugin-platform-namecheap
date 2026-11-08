@@ -77,6 +77,7 @@ class FakeNamecheap:
              "IsOurDNS": "false"}]
         self.zones = {"hypokrites.me": {"email": "MX", "hosts": proton_zone()}}
         self.error: tuple[str, str] | None = None  # every API call answered with it
+        self.fail: dict[str, tuple[str, str]] = {}  # a command answered with this error (number, text): a write failing
         self.keep_ddns = True  # a write keeps a Dynamic DNS host's flag (False: it turns plain)
         self.drop_on_write: str | None = None  # a record's address a write loses (a fault of Namecheap's, for the check)
         self.ddns_password = DDNS_PASSWORD
@@ -103,6 +104,8 @@ class FakeNamecheap:
         if not params.get("ClientIp"):
             return 200, error_xml("1011105", "Parameter ClientIP is missing")
         command = params["Command"]
+        if command in self.fail:
+            return 200, error_xml(*self.fail[command])
         if command == "namecheap.domains.getList":
             size, page = int(params.get("PageSize", 20)), int(params.get("Page", 1))
             shown = self.domains[(page - 1) * size: page * size]

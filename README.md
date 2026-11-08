@@ -24,7 +24,21 @@ While it is attached to the platform app, it reads the account every quarter of 
 hosts every `NAMECHEAP_DDNS_MINUTES` (5), in a thread of its own. Detached (the platform ending, the plugin disabled
 or not valid), nothing of it runs. The platform's page draws what it read last (no request is made to answer it):
 the Dynamic DNS hosts, the domains and each zone in tables, the account in the facts on the right, and two actions,
-**Refresh** and **Update DNS now** (liminal-platform 0.5.0 and later draw them).
+**Refresh** and **Update DNS now** (liminal-platform 0.5.0 and later draw them). With liminal-platform 0.6.0 and
+later, each zone's records are set and removed from the page too (below).
+
+## From the platform's page
+
+Under each zone's table, **Set a record…** opens a form: the host (`@` for the domain itself), the type (each with what
+it holds, and whether it replaces the host's record of its type or is added beside the others), the address, the TTL
+and, for an MX record, its preference. Each record has a **Remove**. Nothing is written until you confirm the change:
+the confirmation names the host, the type and the address in the domain, and says that every other record and the mail
+setting are kept and that the zone is saved to a backup first. The answer says what was done, where the backup is and
+whether the zone read back holds every record as written (or what is missing, and the command that puts it back).
+
+A zone with Dynamic DNS hosts is refused first, as from the command line; the page then asks a second time, naming
+what may happen to them ("Write anyway?"), and writes only on that second yes. A zone that no write could keep whole
+(a CAA or SRV record, a record turned off) has no form, and its note says why.
 
 ## Setting it up
 
@@ -69,8 +83,8 @@ whose mail is at Proton keeps its MX, SPF, DKIM and DMARC records):
   misreading written over), a domain not on Namecheap's DNS; an MX record unless the mail setting is Custom MX.
 - **Dynamic DNS hosts**: setHosts has no record type for an A + Dynamic DNS Record, so a write may turn them into
   plain A records that Dynamic DNS no longer updates. A write to a zone holding them is refused unless asked with
-  `--accept-ddns-reset` (the hooks' `accept_ddns_reset`); the result then says whether they kept it, and the
-  dashboard turns it back on.
+  `--accept-ddns-reset` (the hooks' `accept_ddns_reset`, which the refusal names: the platform's page asks it as a
+  second confirmation); the result then says whether they kept it, and the dashboard turns it back on.
 - **A backup before each write**: the zone as read, as JSON, in the platform's folder under `namecheap/backups/`
   (`LIMINAL_PLATFORM_DIR`, else the data folder's `platform/`). `backups` lists them; `restore` puts one back
   (the zone as it is is backed up first).
@@ -100,10 +114,11 @@ quarter of an hour later (the platform attaches it again and it is tried again),
 
 ## Its hooks
 
-`present`, `status` (the summary, the facts, `tables`, `actions`), `refresh()`, `domains()`, `hosts(domain)`,
-`set_record(domain, host, type, address, ttl=None, mx=None, accept_ddns_reset=False)`,
-`remove_record(domain, host, type, address=None, accept_ddns_reset=False)`, `availability(*names)`, `balance()`,
-`ddns_update(force=True)`.
+`present`, `status` (the summary, the facts, `tables`, `actions`, `forms`), `refresh()`, `domains()`, `hosts(domain)`,
+`set_record(domain, host, rtype, address, ttl=None, mx=None, accept_ddns_reset=False)`,
+`remove_record(domain, host, rtype, address=None, accept_ddns_reset=False)`, `availability(*names)`, `balance()`,
+`ddns_update(force=True)`. A write's report: `said`, `lines` (its words), `ok`, `missing`, `unexpected`, `ddnsLost`,
+`backup`, `restore`.
 
 ## From the command line
 

@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 
-from . import MACHINE, MAIL, when
+from . import MACHINE, MAIL, report_words, when
 from . import zone as zones
 from .api import NamecheapError
 
@@ -63,27 +63,8 @@ def parser() -> argparse.ArgumentParser:
 
 
 def report_lines(rep: dict) -> list[str]:
-    """A write's report in words."""
-    out = [f"{rep['domain']}: {rep['said']}"]
-    if not rep.get("changed"):
-        return out
-    out.append(f"  backup: {rep['backup']}")
-    if rep.get("success") is False:
-        out.append("  Namecheap said the write did not succeed")
-    if rep.get("ok"):
-        out.append(f"  read back: every record as written ({rep['records']}); mail setting {rep.get('emailType')} kept")
-    for what, label in (("missing", "missing after the write"), ("unexpected", "there but not written"), ("ttl", "TTL"),
-                        ("dropped", "made since the backup and dropped")):
-        for item in rep.get(what) or []:
-            out.append(f"  {label}: {item}")
-    if rep.get("emailChanged"):
-        out.append(f"  the mail setting is now {rep.get('emailType')}")
-    if rep.get("ddnsLost"):
-        out.append(f"  Dynamic DNS turned off on {', '.join(rep['ddnsLost'])}: turn it on again in Namecheap's dashboard "
-                   "(Advanced DNS: the host's record, A + Dynamic DNS Record)")
-    if not rep.get("ok"):
-        out.append(f"  to put the zone back as it was: {rep['restore']}")
-    return out
+    """A write's report in words: its headline, then its words (report_words, as the platform's page shows them) indented."""
+    return [f"{rep['domain']}: {rep['said']}", *(f"  {line}" for line in report_words(rep))]
 
 
 def main(argv: list[str] | None = None, plugin=None, out=None, err=None) -> int:

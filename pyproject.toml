@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plugin-platform-namecheap"
-version = "0.1.0"  # the plugin's own release (CHANGELOG.md); the platform shows it on the plugin's page
+version = "0.2.0"  # the plugin's own release (CHANGELOG.md); the platform shows it on the plugin's page
 description = "Namecheap for Liminal's platform: your domains and their records through Namecheap's API (every other record and the mail setting kept on a write), and Dynamic DNS keeping hosts at this network's address."
 readme = "README.md"
 requires-python = ">=3.10"

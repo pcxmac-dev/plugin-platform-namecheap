@@ -20,7 +20,7 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from .api import TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, Record, Zone, valid_domain
+from .api import TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Record, Zone, valid_domain
 
 ROUND_TRIP = frozenset({"A", "AAAA", "ALIAS", "CNAME", "MX", "MXE", "NS", "TXT", "URL", "URL301", "FRAME"})  # sent back as read
 WRITABLE = ROUND_TRIP  # what a record set here may be (not CAA: its Flag and Tag are not verified to come back whole)
@@ -33,7 +33,12 @@ TARGET_LABEL = re.compile(r"^[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?$")
 
 
 class Refusal(ValueError):
-    """A write not made, and why: nothing was sent to Namecheap."""
+    """A write not made, and why: nothing was sent to Namecheap. `accept`: the argument that, set, makes the write anyway
+    (accept_ddns_reset, for a zone with Dynamic DNS hosts); the platform's page asks it as a second, explicit confirmation."""
+
+    def __init__(self, message: str, accept: str | None = None):
+        super().__init__(message)
+        self.accept = accept
 
 
 # -- what is written -----------------------------------------------------------------------------------------------------
@@ -164,9 +169,20 @@ def check_writable(zone: Zone, accept_ddns_reset: bool = False) -> None:
     ddns = sorted({r.name for r in zone.records if r.ddns})
     if ddns and not accept_ddns_reset:
         raise Refusal(f"{d} has Dynamic DNS hosts ({', '.join(ddns)}): setHosts has no record type for them, so a write may "
-                      "turn them into plain A records that Dynamic DNS no longer updates; write anyway with accept_ddns_reset "
-                      "(the command line's --accept-ddns-reset): the result says whether they kept it, and the dashboard "
-                      "turns it back on (Advanced DNS: the host's record, A + Dynamic DNS Record)")
+                      "turn them into plain A records that Dynamic DNS no longer updates, and none is made unless that is "
+                      "accepted (accept_ddns_reset: the platform's page asks; the command line's --accept-ddns-reset). The "
+                      "report then says whether they kept it, and the dashboard turns it back on (Advanced DNS: the host's "
+                      "record, A + Dynamic DNS Record)", accept="accept_ddns_reset")
+
+
+def unwritable(zone: Zone) -> str | None:
+    """Why no write can be made over the zone as read (check_writable but for its Dynamic DNS hosts, which the user is asked
+    to accept), or None: the platform's page offers no form for a zone that every write would be refused."""
+    try:
+        check_writable(zone, accept_ddns_reset=True)
+    except Refusal as e:
+        return str(e)
+    return None
 
 
 # -- the changes -------------------------------------------------------------------------------------------------------------
@@ -321,11 +337,20 @@ def write(api: NamecheapApi, domain: str, plan: Plan, folder: Path, accept_ddns_
     if same(zone.records, records) and mail == zone.email_type:
         return {"domain": zone.domain, "changed": False, "said": words + ": nothing written"}, zone
     backup = save_backup(folder, zone, clock)
-    success = api.set_hosts(zone.domain, records, mail)
-    after = api.hosts(zone.domain)
+    restore_line = f'python -m plugin_platform_namecheap restore {zone.domain} "{backup}"'
+    saved = f"the zone as it was before is saved in {backup} (to put it back: {restore_line})"
+    try:
+        success = api.set_hosts(zone.domain, records, mail)
+    except NamecheapError as e:  # whether it was written is Namecheap's to say: the backup said either way
+        raise NamecheapError(f"the write ({words}) was answered with an error: {e}; {saved}", e.number, e.command) from e
+    try:
+        after = api.hosts(zone.domain)
+    except NamecheapError as e:
+        raise NamecheapError(f"the write ({words}) was sent, {'answered as a success' if success else 'not answered as a success'}, "
+                             f"but the zone could not be read back to check it: {e}; {saved}", e.number, e.command) from e
     report = verify(zone, records, after)
     report.update({"domain": zone.domain, "changed": True, "said": words, "success": success, "backup": str(backup),
-                   "restore": f'python -m plugin_platform_namecheap restore {zone.domain} "{backup}"'})
+                   "restore": restore_line})
     if mail != zone.email_type:  # a restore putting the mail setting back: changed by asking, so not a fault
         report["emailChanged"] = (after.email_type or None) != (mail or None)
         report["ok"] = not report["missing"] and not report["unexpected"] and not report["emailChanged"]

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0 (2026-11-08)
+
+Records set and removed from the platform's page, each with a confirmation, instead of only the command line (its forms:
+liminal-platform 0.6.0 draws `status.forms`):
+
+- under each zone's table, **Set a record…**: the host, the type (each with what it holds and whether it replaces the
+  host's record of its type or is added beside the others; MX with the Custom MX mail setting alone, MXE with MXE), the
+  address, the TTL and, for MX, the preference; on each of its records, **Remove**, naming the record by its whole
+  address. The fields are the hooks' arguments in order (`set_record`, `remove_record`);
+- the confirmation names the change (the host, the type and the address in the domain) and says that every other record
+  and the mail setting are kept and that the zone is saved to a backup first, then written whole, read back and checked;
+- a zone with Dynamic DNS hosts is still refused first: the refusal names `accept_ddns_reset` (`zone.Refusal.accept`),
+  which the page asks as a second, explicit confirmation ("Write anyway?") before it writes; the confirmation of such a
+  zone says beforehand that it will ask again;
+- a zone every write would be refused (CAA or SRV records, a record turned off, no mail setting said) has no form and
+  says why in its note;
+- a write's report has its words (`lines`, shared with the command line): the backup, the check after it, what to do
+  about a fault (the command that puts the backup back);
+- a write answered with an error, or not read back after it, says where the zone as it was is saved and the command
+  that puts it back, so the page shows it beside the failure.
+
 ## 0.1.0 (2026-11-08)
 
 The first release (the user: "lets create a namecheap platform plugin that utilizes the API to create a dynamic DNS method,

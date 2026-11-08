@@ -8,7 +8,9 @@ Its settings are pairs asked of the login of the app it is attached to (settings
 NAMECHEAP_DDNS_HOSTS, NAMECHEAP_DDNS_PASSWORD ...), never a file of its own. While attached to the platform app it reads
 the account every quarter of an hour and checks the Dynamic DNS hosts every few minutes in a thread of its own; detached,
 nothing of it runs. Its status is what was read last (no request is made to answer it): the platform's page draws its
-tables and its actions (Refresh, Update DNS now).
+tables, its actions (Refresh, Update DNS now) and its forms (liminal-platform 0.6.0): a record set in each zone shown and
+a Remove on each of its records, each asked once the user has confirmed the change, a zone with Dynamic DNS hosts only
+once the user has accepted that too.
 
     python -m plugin_platform_namecheap ip | status | domains | hosts DOMAIN | set DOMAIN HOST TYPE ADDRESS [--ttl N] [--mx N]
         | remove DOMAIN HOST TYPE [ADDRESS] | restore DOMAIN FILE | backups [DOMAIN] | check NAME... | balance | ddns [--now]
@@ -25,10 +27,10 @@ from liminal_libs.machines.plugin import MachinePlugin
 from . import ddns
 from . import settings as settings_mod
 from . import zone as zones
-from .api import LIMITER, NamecheapApi, NamecheapError, Zone, shorten
+from .api import LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
 from .settings import API_KEY, API_USER, DDNS_HOSTS, DDNS_PASSWORD, KEYS, NAMES, Config
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 REFRESH_S = 900.0  # the account read again at most this often while attached (or by Refresh)
 CONFIG_S = 30.0  # the settings asked of the login again after this long
 RETRY_S = 900.0  # a part that failed is taken as untried after this long while detached: attached again, it is tried again
@@ -39,6 +41,48 @@ NOT_SET = (f"not set up: {API_USER} and {API_KEY} for the API (domains and recor
 MAIL = {"MX": "custom MX", "MXE": "MXE", "FWD": "Namecheap's email forwarding", "OX": "Namecheap Private Email",
         "NONE": "no email service", "GMAIL": "Gmail"}
 PRIVACY = {"ENABLED": "on", "DISABLED": "off", "NOTPRESENT": "none"}
+TYPES = {  # the record types the page's form sets (zone.WRITABLE), in the order offered, with what each holds and does
+    "A": "an IPv4 address; replaces the host's A record",
+    "AAAA": "an IPv6 address; replaces the host's AAAA record",
+    "CNAME": "a host name the host stands for; it holds nothing else, and @ takes none",
+    "ALIAS": "a host name, @ too; replaces the host's ALIAS record",
+    "TXT": "text (SPF, DKIM, DMARC, a verification); added beside the host's others",
+    "MX": "a mail server, with its preference; added beside the others",
+    "MXE": "the IPv4 address that takes the mail (the MXE mail setting)",
+    "NS": "a subdomain's nameserver; added beside the others",
+    "URL": "a redirect (302) to an http or https address; replaces the host's",
+    "URL301": "a permanent redirect (301) to an http or https address; replaces the host's",
+    "FRAME": "a masked redirect (the address shown in a frame); replaces the host's",
+}
+ACCEPT = "accept_ddns_reset"  # the hooks' argument accepting a write over Dynamic DNS hosts (zone.Refusal's accept)
+
+
+def mail_of(email_type: str | None) -> str:
+    return MAIL.get(email_type or "", email_type or "not said")
+
+
+def report_words(rep: dict) -> list[str]:
+    """A write's report in words after its headline (`said`): the backup, the check after it, what to do about a fault.
+    The hooks give them as the report's `lines` (the platform's page shows them); the command line prints them indented."""
+    if not rep.get("changed"):
+        return []
+    out = [f"backup: {rep['backup']}"]
+    if rep.get("success") is False:
+        out.append("Namecheap said the write did not succeed")
+    if rep.get("ok"):
+        out.append(f"read back: every record as written ({rep['records']}); the mail setting ({mail_of(rep.get('emailType'))}) kept")
+    for what, label in (("missing", "missing after the write"), ("unexpected", "there but not written"), ("ttl", "TTL"),
+                        ("dropped", "made since the backup and dropped")):
+        for item in rep.get(what) or []:
+            out.append(f"{label}: {item}")
+    if rep.get("emailChanged"):
+        out.append(f"the mail setting is now {mail_of(rep.get('emailType'))}")
+    if rep.get("ddnsLost"):
+        out.append(f"Dynamic DNS turned off on {', '.join(rep['ddnsLost'])}: turn it on again in Namecheap's dashboard "
+                   "(Advanced DNS: the host's record, A + Dynamic DNS Record)")
+    if not rep.get("ok"):
+        out.append(f"to put the zone back as it was: {rep['restore']}")
+    return out
 
 
 def backups_dir() -> Path:
@@ -233,12 +277,15 @@ class NamecheapPlugin(MachinePlugin):
         report, after = zones.restore(self.client(), domain, path, self.folder, accept_ddns_reset=bool(accept_ddns_reset),
                                       clock=self._clock)
         self._keep(after)
+        report["lines"] = report_words(report)
         return report
 
     def _write(self, domain: str, plan, accept_ddns_reset) -> dict:
+        """A change written (zone.write); its report with its words after the headline (`lines`)."""
         report, after = zones.write(self.client(), domain, plan, self.folder, accept_ddns_reset=bool(accept_ddns_reset),
                                     clock=self._clock)
         self._keep(after)
+        report["lines"] = report_words(report)
         return report
 
     def _keep(self, z: Zone) -> None:
@@ -350,7 +397,7 @@ class NamecheapPlugin(MachinePlugin):
         cfg = self.config()
         if not cfg.present:
             return {"present": False, "valid": False, "why": NOT_SET, "summary": "not set up", "settingsNotSet": ", ".join(NAMES),
-                    "tables": [], "actions": []}
+                    "tables": [], "actions": [], "forms": []}
         rt, now, attached = self._rt, self._clock(), self.app is not None
         with rt.lock:
             domains, balance, read = list(rt.domains or []), rt.balance, dict(rt.zones)
@@ -403,6 +450,7 @@ class NamecheapPlugin(MachinePlugin):
             out["ddnsEvery"] = f"every {cfg.minutes:g} min" + ("" if attached else ", once attached")
         out["backups"] = str(self.folder)
         out["tables"] = self._tables(cfg, domains, read, hosts, states, public)
+        out["forms"] = [f for name in sorted(read) if self._writable(cfg, read[name]) for f in self._forms(read[name])]
         out["actions"] = ([{"hook": "refresh", "args": [], "title": "Refresh",
                             "note": "the domains, the balance and the records read again now (a few requests)"}] if cfg.api_ready else []) + \
                          ([{"hook": "ddns_update", "args": [], "title": "Update DNS now",
@@ -457,16 +505,80 @@ class NamecheapPlugin(MachinePlugin):
                 out.append({"title": f"{name} records", "note": z, "columns": [{"title": "Host"}], "rows": [],
                             "empty": "Not read."})
                 continue
-            rows = [[r.name, r.type, cell(r.address if len(r.address) <= 64 else r.address[:63] + "…"), str(r.ttl),
-                     str(r.mxpref) if r.type == "MX" else "", "yes" if r.ddns else ""]
-                    for r in sorted(z.records, key=lambda r: (r.name != "@", r.name.lower(), r.type))]
-            out.append({"title": f"{z.domain} records",
-                        "note": f"mail: {MAIL.get(z.email_type or '', z.email_type or 'not said')} · read {when(z.read_at)} · "
-                                "set and removed from the command line (python -m plugin_platform_namecheap set | remove)",
-                        "columns": [{"title": "Host"}, {"title": "Type"}, {"title": "Address"}, {"title": "TTL", "num": True},
-                                    {"title": "MX", "num": True}, {"title": "Dynamic DNS"}],
-                        "rows": rows, "empty": "No records."})
+            writable, why = self._writable(cfg, z), zones.unwritable(z)
+            rows = []
+            for r in sorted(z.records, key=lambda r: (r.name != "@", r.name.lower(), r.type)):
+                short = r.address if len(r.address) <= 64 else r.address[:63] + "…"
+                row = [r.name, r.type, cell(short), str(r.ttl), str(r.mxpref) if r.type == "MX" else "", "yes" if r.ddns else ""]
+                if writable:  # its Remove: the record named by its address (the whole one, not the shortened)
+                    row.append({"form": f"remove:{z.domain}", "title": "Remove", "label": f"Remove {r.name} {r.type} {short}",
+                                "values": {"host": r.name, "rtype": r.type, "address": r.address}})
+                rows.append(row)
+            table = {"title": f"{z.domain} records",
+                     "note": f"mail: {mail_of(z.email_type)} · read {when(z.read_at)} · " + (
+                         "set and removed here or from the command line (python -m plugin_platform_namecheap set | remove): a "
+                         "backup first, every other record and the mail setting kept" if writable else
+                         f"not written here: {why}" if why else "set and removed once the API is set up"),
+                     "columns": [{"title": "Host"}, {"title": "Type"}, {"title": "Address"}, {"title": "TTL", "num": True},
+                                 {"title": "MX", "num": True}, {"title": "Dynamic DNS"}, *([{"title": ""}] if writable else [])],
+                     "rows": rows, "empty": "No records."}
+            if writable:
+                table["actions"] = [{"form": f"set:{z.domain}", "title": "Set a record…"}]
+            out.append(table)
         return out
+
+    @staticmethod
+    def _writable(cfg: Config, z) -> bool:
+        """Whether the page offers writes over a zone as read: the API set up and nothing in it that a write would lose
+        (zone.unwritable; Dynamic DNS hosts are asked of the user instead)."""
+        return bool(cfg.api_ready) and isinstance(z, Zone) and zones.unwritable(z) is None
+
+    @staticmethod
+    def _forms(z: Zone) -> list[dict]:
+        """The forms the platform's page draws for a zone (liminal-platform 0.6.0, status.forms): a record set, and a
+        record removed (each row's Remove fills it); the fields are the hooks' arguments in order. Each is asked once the
+        user has confirmed the change, which names the domain, host, type and address and the backup made first; a zone
+        with Dynamic DNS hosts is written only once the user has accepted that too (accept_ddns_reset, asked by the page
+        when the write is refused for them: a second, explicit confirmation)."""
+        d = z.domain
+        ddns = sorted({r.name for r in z.records if r.ddns})
+        kept = (f"Every other record and the mail setting ({mail_of(z.email_type)}) are kept: the zone is saved to a backup "
+                "first, then written whole, read back and checked.")
+        if ddns:
+            kept += (f" {d} has Dynamic DNS hosts ({', '.join(ddns)}): you are asked again before a write that may turn "
+                     "them into plain A records.")
+        accept = {"name": ACCEPT, "type": "accept", "title": "Write anyway?", "yes": "Write anyway",
+                  "words": ("Writing anyway may turn the Dynamic DNS hosts of {domain} into plain A records that Dynamic DNS "
+                            "no longer updates (setHosts has no record type for them). The report says whether they kept it; "
+                            "Namecheap's dashboard turns it back on (Advanced DNS: the host's record, A + Dynamic DNS Record).")}
+        domain = {"name": "domain", "label": "Domain", "type": "fixed", "value": d}
+        types = [t for t in TYPES if t not in ("MX", "MXE") or t == z.email_type]  # MX with Custom MX alone, MXE with MXE
+        return [
+            {"id": f"set:{d}", "hook": "set_record", "title": f"Set a record in {d}",
+             "note": ("An A, AAAA, ALIAS, CNAME, MXE or redirect replaces the host's record of its type; a TXT, MX or NS "
+                      "record is added beside the others."),
+             "fields": [domain,
+                        {"name": "host", "label": "Host", "type": "text", "required": True, "placeholder": "@, www, home",
+                         "note": f"@ is {d} itself; home is home.{d}"},
+                        {"name": "rtype", "label": "Type", "type": "choice", "value": "A",
+                         "choices": [{"value": t, "title": t, "note": TYPES[t]} for t in types]},
+                        {"name": "address", "label": "Address", "type": "text", "required": True,
+                         "placeholder": "an address, a host name or text, as its type says"},
+                        {"name": "ttl", "label": "TTL (seconds)", "type": "number", "min": TTL_MIN, "max": TTL_MAX,
+                         "placeholder": str(TTL_DEFAULT), "empty": f"the record's own, else {TTL_DEFAULT}"},
+                        {"name": "mx", "label": "MX preference", "type": "number", "min": 0, "max": 65535, "placeholder": "10",
+                         "when": {"rtype": ["MX"]}, "empty": "the record's own, else 10"},
+                        accept],
+             "submit": "Review the change",
+             "confirm": {"title": f"Set this record in {d}?", "words": "{host} {rtype} {address} is set in {domain}. " + kept,
+                         "yes": "Set the record"}},
+            {"id": f"remove:{d}", "hook": "remove_record", "title": f"Remove a record from {d}",
+             "fields": [domain, {"name": "host", "label": "Host", "type": "fixed"}, {"name": "rtype", "label": "Type", "type": "fixed"},
+                        {"name": "address", "label": "Address", "type": "fixed"}, accept],
+             "confirm": {"title": f"Remove this record from {d}?",
+                         "words": "{host} {rtype} {address} is removed from {domain}. " + kept,
+                         "yes": "Remove the record", "danger": True}},
+        ]
 
 
 MACHINE = NamecheapPlugin()
