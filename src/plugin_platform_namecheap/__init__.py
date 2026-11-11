@@ -31,7 +31,7 @@ from . import zone as zones
 from .api import LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
 from .settings import API_KEY, API_USER, DDNS_HOSTS, DDNS_PASSWORD, KEYS, NAMES, Config
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 REFRESH_S = 900.0  # the account read again at most this often while attached (or by Refresh)
 CONFIG_S = 30.0  # the settings asked of the login again after this long
 RETRY_S = 900.0  # a part that failed is taken as untried after this long while detached: attached again, it is tried again
@@ -284,7 +284,7 @@ class NamecheapPlugin(MachinePlugin):
 
     def restore(self, domain: str, path, accept_ddns_reset=False) -> dict:
         """A backup put back (zone.restore), the zone as it is now backed up first."""
-        report, after = zones.restore(self.client(), domain, path, self.folder, accept_ddns_reset=bool(accept_ddns_reset),
+        report, after = zones.restore(self.client(), domain, path, self.folder, accept_ddns_reset=accept_ddns_reset is True,
                                       clock=self._clock)
         self._keep(after)
         report["lines"] = report_words(report)
@@ -292,7 +292,9 @@ class NamecheapPlugin(MachinePlugin):
 
     def _write(self, domain: str, plan, accept_ddns_reset) -> dict:
         """A change written (zone.write); its report with its words after the headline (`lines`)."""
-        report, after = zones.write(self.client(), domain, plan, self.folder, accept_ddns_reset=bool(accept_ddns_reset),
+        # the second confirmation counts only when exactly true (the page sends JSON true; a "false" or a 1 from a local
+        # program is no acceptance: 0.3.1, the audit before the cloud plugins' keys)
+        report, after = zones.write(self.client(), domain, plan, self.folder, accept_ddns_reset=accept_ddns_reset is True,
                                     clock=self._clock)
         self._keep(after)
         report["lines"] = report_words(report)
@@ -499,10 +501,15 @@ class NamecheapPlugin(MachinePlugin):
         out["backups"] = str(self.folder)
         out["tables"] = self._tables(cfg, domains, read, hosts, states, public)
         out["forms"] = [f for name in sorted(read) if self._writable(cfg, read[name]) for f in self._forms(read[name])]
+        if cfg.ddns_ready:  # Update DNS now, confirmed first (0.3.1: it sent on one click)
+            out["forms"].append({"id": "ddns-now", "hook": "ddns_update", "title": "Update DNS now", "fields": [],
+                                 "confirm": {"title": "Update the Dynamic DNS hosts now?",
+                                             "words": ("An update is sent now for every Dynamic DNS host, with this network's "
+                                                       "address, whether its record differs or not."),
+                                             "yes": "Update now"}})
         out["actions"] = ([{"hook": "refresh", "args": [], "title": "Refresh",
                             "note": "the domains, the balance and the records read again now (a few requests)"}] if cfg.api_ready else []) + \
-                         ([{"hook": "ddns_update", "args": [], "title": "Update DNS now",
-                            "note": "an update sent now for every Dynamic DNS host, with this network's address"}] if cfg.ddns_ready else [])
+                         ([{"form": "ddns-now", "title": "Update DNS now"}] if cfg.ddns_ready else [])
         return out
 
     def _summary(self, cfg, parts, domains, balance, hosts, states, attached) -> str:

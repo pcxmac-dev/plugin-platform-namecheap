@@ -183,3 +183,14 @@ def test_a_write_that_fails_after_its_backup_names_the_backup(made, env, tmp_pat
     with pytest.raises(NamecheapError, match="was sent, answered as a success, but the zone could not be read back") as failed:
         p.set_record("hypokrites.me", "home", "A", HOME)
     assert "the zone as it was before is saved in " in str(failed.value) and len(zones.backups(tmp_path / "backups")) == 2
+
+
+def test_a_second_confirmation_counts_only_when_exactly_true():
+    """0.3.1: a write over Dynamic DNS hosts is accepted only by an exactly true accept_ddns_reset; a "false" string or a
+    1 from a local program is no acceptance."""
+    import inspect
+
+    import plugin_platform_namecheap as module
+
+    source = inspect.getsource(module.NamecheapPlugin)
+    assert source.count("accept_ddns_reset=accept_ddns_reset is True") == 2 and "bool(accept_ddns_reset)" not in source

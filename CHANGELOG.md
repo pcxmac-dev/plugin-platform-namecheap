@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-11-11)
+
+What the audit before the cloud plugins' keys found here: Update DNS now asks first (a form straight to its
+confirmation; it sent on one click), and a write over Dynamic DNS hosts is accepted only by an exactly true
+`accept_ddns_reset` (a "false" or a 1 from a local program is no acceptance).
+
 ## 0.3.0 (2026-11-11)
 
 Its API on its page (plugin API 2.2, liminal-libs 1.49.0; the user: "each plugin should reflect the the API its attached

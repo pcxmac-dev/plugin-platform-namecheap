@@ -71,7 +71,10 @@ def test_the_status_is_what_was_read_last_with_its_tables_and_actions_and_no_val
     assert domains["rows"][0][0] == "hypokrites.me" and domains["rows"][1][0] == {"text": "example.net", "sub": "expired"}
     assert domains["rows"][1][4] == "elsewhere" and domains["rows"][0][5] == "on"
     assert records["rows"][0][:3] == ["@", "MX", "mail.protonmail.ch."] and "mail: custom MX" in records["note"]
-    assert [a["hook"] for a in st["actions"]] == ["refresh", "ddns_update"] and all(a["args"] == [] for a in st["actions"])
+    assert st["actions"][0]["hook"] == "refresh" and st["actions"][0]["args"] == []
+    assert st["actions"][1] == {"form": "ddns-now", "title": "Update DNS now"}  # asked first (0.3.1)
+    now = next(f for f in st["forms"] if f["id"] == "ddns-now")
+    assert now["hook"] == "ddns_update" and now["fields"] == [] and now["confirm"]["yes"] == "Update now"
     text = json.dumps(st)
     assert KEY not in text and DDNS_PASSWORD not in text and "tester" not in text  # names of the settings, never a value
 
@@ -186,7 +189,8 @@ def test_the_platform_reads_it_in_its_own_shape(made, env):
     for t in st["tables"]:
         assert set(t) >= {"title", "columns", "rows"} and all(len(r) == len(t["columns"]) for r in t["rows"])
     hooks = p.interface()["hooks"]
-    assert all(a["hook"] in hooks for a in st["actions"])
+    assert all(a["hook"] in hooks for a in st["actions"] if "hook" in a)
+    assert all(f["hook"] in hooks for f in st["forms"])
     flat = {k: v for k, v in st.items() if not isinstance(v, (list, dict))}
     assert all(isinstance(v, (str, bool)) for v in flat.values())
 
