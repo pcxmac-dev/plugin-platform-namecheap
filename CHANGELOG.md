@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.0 (2026-11-11)
+
+Its API on its page (plugin API 2.2, liminal-libs 1.49.0; the user: "each plugin should reflect the the API its attached
+to, and present links that provide documentation, the plugin interface should more or less contain what it already has,
+BUT, it should also expose more of what the API is about"). Needs liminal-libs>=1.49.0. Its `signup` and `limits` are as
+they were.
+
+- `apis` (apis.py): two cards. Namecheap's pages refuse automated readers (403), so they were read in a browser on
+  2026-11-11 and every address on the cards was seen there (each answered 200). The **Namecheap API**: the introduction,
+  the methods page, the global parameters, error codes, extended attributes, transfer statuses, the change log, the API
+  FAQ (its limits: 50 calls a minute, 700 an hour, 8,000 a day across the key; its requirements: 20 domains, $50 on the
+  balance or $50 spent in two years), the API access settings, the sandbox, prices, status updates and terms; its eight
+  command groups as the methods page names them (domains, domains.dns, domains.ns, domains.transfer, ssl, users,
+  users.address, domainprivacy), each with what the plugin does with it (domains, domains.dns and users used), and all
+  59 commands, each with its own page, as their pages name them (domainprivacy's are namecheap.whoisguard.*): the five
+  the plugin sends with what for, the changes marked as writes, and the nine that charge the account (create, renew,
+  reactivate, a transfer, a certificate, more of its names, privacy's renewal, funds added) marked as costing, none sent.
+  **Namecheap Dynamic DNS**: the knowledge base's update (an HTTPS GET of host, domain, password and ip; IPv4 only; GET,
+  never POST), the A + Dynamic DNS hosts it needs, the clients.
+- `api_facts()`: what the plugin already holds, asking nothing (neither Namecheap nor the login): the requests its
+  limiter counted against the key, the environment, when the account was read and what it held (the domains, the zones
+  read, the balance), the last trouble; each Dynamic DNS host's last result and this network's address as last found.
+- Tests: the cards are sound; the API card holds every group and command of the methods page; the commands it names as
+  used are exactly those the plugin sends (read from the stand-in Namecheap and from its client's own strings), none
+  that spends; the update's parameters are the knowledge base's; the facts ask nothing; with LIMINAL_VENDOR_PAGES=1,
+  every address answers (Namecheap's 403 counts as there).
+
 ## 0.2.2 (2026-11-08)
 
 Its icon is Namecheap's N, drawn in the library's line (liminal-libs 1.33.0's `namecheap`; the user: "for name cheap, use it's icon"). Needs liminal-libs>=1.33.0.

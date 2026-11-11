@@ -24,13 +24,14 @@ from pathlib import Path
 
 from liminal_libs.machines.plugin import MachinePlugin
 
+from . import apis as cards
 from . import ddns
 from . import settings as settings_mod
 from . import zone as zones
 from .api import LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
 from .settings import API_KEY, API_USER, DDNS_HOSTS, DDNS_PASSWORD, KEYS, NAMES, Config
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 REFRESH_S = 900.0  # the account read again at most this often while attached (or by Refresh)
 CONFIG_S = 30.0  # the settings asked of the login again after this long
 RETRY_S = 900.0  # a part that failed is taken as untried after this long while detached: attached again, it is tried again
@@ -143,7 +144,10 @@ class NamecheapPlugin(MachinePlugin):
     title = "Namecheap"
     about = ("Your Namecheap domains through Namecheap's API, their records set and removed with every other record and the "
              "mail setting kept, and Dynamic DNS keeping hosts at this network's address")
-    api = "2.1"
+    api = "2.2"
+    # what it attaches to (plugin API 2.2): Namecheap's XML API, every command group of it, and its Dynamic DNS update
+    # (apis.py: each one's pages, parts and calls)
+    apis = cards.APIS
     order = 740
     ICON = "namecheap"  # Namecheap's N (liminal-libs 1.33.0's icons.js)
     HOOKS = (*MachinePlugin.HOOKS, "refresh", "domains", "hosts", "set_record", "remove_record", "availability",
@@ -336,6 +340,44 @@ class NamecheapPlugin(MachinePlugin):
         super().detach()
         with self._rt.lock:
             self._rt.config = None
+
+    def api_facts(self) -> dict:
+        """What it learned of its APIs while it ran (plugin API 2.2), asking nothing (neither Namecheap nor the login):
+        the requests its limiter counted against the key, the environment, when the account was read and what it held
+        (the domains, the zones read, the balance), the last trouble; each Dynamic DNS host's last result and this
+        network's address as last found. Nothing learned yet: {}."""
+        rt = self._rt
+        with rt.lock:
+            domains, balance, read = rt.domains, rt.balance, dict(rt.zones)
+            refreshed_at, api_ok, api_error, api_error_at = rt.refreshed_at, rt.api_ok, rt.api_error, rt.api_error_at
+            config, updater = rt.config, rt.updater
+        out: dict[str, dict[str, str]] = {}
+        used = self._limiter.used()
+        api: dict[str, str] = {}
+        if any(n for _, n, _ in used) or refreshed_at or api_ok is not None:
+            api["Requests"] = " · ".join(f"{n} of {most:,} {span}" for (_, n, most), span in
+                                         zip(used, ("this minute", "this hour", "today")))
+        if api and config is not None and config[1].api_ready:
+            api["Environment"] = "the sandbox" if config[1].sandbox else "production"
+        if refreshed_at:
+            api["Read"] = when(refreshed_at)
+        if domains is not None:
+            ours = sum(1 for d in domains if d.get("ourDns"))
+            api["Domains"] = f"{len(domains)} ({ours} on Namecheap's DNS, {sum(isinstance(z, Zone) for z in read.values())} read)"
+        if balance and not balance.get("error"):
+            api["Balance"] = f"{balance.get('available')} {balance.get('currency')}".strip()
+        if api_ok is False and api_error:
+            api["Last trouble"] = f"{api_error[:200]} ({when(api_error_at)})"
+        if api:
+            out[cards.API] = api
+        if updater is not None:
+            states = updater.states()
+            ddns_facts = {s.fqdn: f"{s.result} ({when(s.checked_at)})" for s in states if s.checked_at}
+            if updater.public:
+                ddns_facts["This network's address"] = f"{updater.public} ({when(updater.public_at)})"
+            if ddns_facts:
+                out[cards.DDNS] = ddns_facts
+        return out
 
     @property
     def working(self) -> bool:

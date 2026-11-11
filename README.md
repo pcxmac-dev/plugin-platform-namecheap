@@ -9,7 +9,7 @@ are not integrating login-app right now".
 
 ## What it does
 
-A machine plugin of the platform (`liminal_libs.machines.MachinePlugin`, plugin API 2.1, its icon the globe):
+A machine plugin of the platform (`liminal_libs.machines.MachinePlugin`, plugin API 2.2, its icon the globe):
 
 - **The account**: every domain (its expiry, auto-renewal, registrar lock, whether it is on Namecheap's DNS, its
   privacy), the balance, and the records of each domain on Namecheap's DNS. Whether names are free to register
@@ -142,6 +142,25 @@ python -m plugin_platform_namecheap ddns [--now]
 ```
 
 `--json` before the command prints the answer as JSON.
+
+## Its API
+
+What it attaches to, as its page shows it (plugin API 2.2: `apis.py`; Namecheap's pages refuse automated readers, so
+they were read in a browser on 2026-11-11), each one's parts and calls, those the plugin uses first and the rest after:
+
+- **Namecheap API**: the [introduction](https://www.namecheap.com/support/api/intro/), the
+  [methods](https://www.namecheap.com/support/api/methods/) (all eight command groups and their 59 commands, each linked
+  to its page, those that would charge the account marked as such; the plugin sends five, none of them), the
+  [global parameters](https://www.namecheap.com/support/api/global-parameters/), the
+  [error codes](https://www.namecheap.com/support/api/error-codes/) and the
+  [API FAQ](https://www.namecheap.com/support/knowledgebase/article.aspx/9739/63/api-faq/) (its limits: 50 calls a
+  minute, 700 an hour, 8,000 a day across the key).
+- **Namecheap Dynamic DNS**: [the update over HTTPS](https://www.namecheap.com/support/knowledgebase/article.aspx/29/11/how-to-dynamically-update-the-hosts-ip-with-an-https-request/)
+  and [a host for Dynamic DNS](https://www.namecheap.com/support/knowledgebase/article.aspx/43/11/how-do-i-set-up-a-host-for-dynamic-dns/).
+
+`api_facts()` says what it already holds, asking nothing: the requests counted against the key, when the account was
+read and what it held, the last trouble, each Dynamic DNS host's last result. `LIMINAL_VENDOR_PAGES=1 pytest
+tests/test_apis.py` checks that every address on the cards still answers.
 
 ## Limits
 
