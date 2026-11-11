@@ -121,7 +121,11 @@ def test_a_change_of_the_settings_makes_a_failed_part_untried(made, env, monkeyp
 def test_attached_it_reads_in_the_background_through_the_apps_login_and_detached_nothing_runs(made):
     p, fake, dns = made()
     login = Pairs(settings_of(ddns=True))
-    p.attach(object(), login)
+    other = type("Charts", (), {"NAME": "charts"})()  # another app attaching it starts nothing (0.3.1)
+    p.attach(other, login)
+    assert not p.working
+    p.detach()
+    p.attach(type("Platform", (), {"NAME": "platform"})(), login)
     try:
         assert p.working
         assert wait_until(lambda: p.status()["summary"] == f"2 domains · 12.34 USD · home.hypokrites.me at {HOME}")
