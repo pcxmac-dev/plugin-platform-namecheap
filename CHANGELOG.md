@@ -5,7 +5,8 @@
 What the audit before the cloud plugins' keys found here: Update DNS now asks first (a form straight to its
 confirmation; it sent on one click), and a write over Dynamic DNS hosts is accepted only by an exactly true
 `accept_ddns_reset` (a "false" or a 1 from a local program is no acceptance). Its background reading starts only
-when the platform attaches it: the charts app run alone attaches every plugin it finds.
+when the platform attaches it (not its one-shot status or machine command): the charts app run alone attaches every
+plugin it finds.
 
 ## 0.3.0 (2026-11-11)
 

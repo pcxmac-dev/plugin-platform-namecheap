@@ -125,6 +125,9 @@ def test_attached_it_reads_in_the_background_through_the_apps_login_and_detached
     p.attach(other, login)
     assert not p.working
     p.detach()
+    p.attach(type("Once", (), {"NAME": "platform", "once": True})(), login)  # the platform's one-shot command: nothing either
+    assert not p.working
+    p.detach()
     p.attach(type("Platform", (), {"NAME": "platform"})(), login)
     try:
         assert p.working

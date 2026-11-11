@@ -333,7 +333,7 @@ class NamecheapPlugin(MachinePlugin):
         interface = super().attach(app, login)
         with self._rt.lock:
             self._rt.config = None
-        if getattr(app, "NAME", "") == "platform":  # the platform's alone: the charts app run alone attaches every plugin
+        if getattr(app, "NAME", "") == "platform" and not getattr(app, "once", False):  # the platform's alone: the charts app run alone attaches every plugin
             self._start()  # it finds, and must not start the account's reads (0.3.1, the audit's note)
         return interface
 
