@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 (2026-11-14)
+
+Drawn under the platform's Cloud plugins section, in the list on the left, beside the cloud providers
+(the user: "please create cloud plugins section on the left side and include cloud service plugins in that section"): Namecheap is a cloud service for domains and DNS. It sets `SECTION = "cloud"`, the attribute from
+liminal-libs 1.51.0; liminal-platform 0.25.0 draws it, and an older platform keeps it under Machine plugins. Nothing
+else changes.
+
 ## 0.3.1 (2026-11-11)
 
 What the audit before the cloud plugins' keys found here: Update DNS now asks first (a form straight to its
