@@ -31,7 +31,7 @@ from . import zone as zones
 from .api import LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
 from .settings import API_KEY, API_USER, DDNS_HOSTS, DDNS_PASSWORD, KEYS, NAMES, Config
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 REFRESH_S = 900.0  # the account read again at most this often while attached (or by Refresh)
 CONFIG_S = 30.0  # the settings asked of the login again after this long
 RETRY_S = 900.0  # a part that failed is taken as untried after this long while detached: attached again, it is tried again

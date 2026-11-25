@@ -52,6 +52,46 @@ def test_an_update_is_sent_only_when_the_record_differs_and_then_holds_the_addre
     assert forced["ok"] and len(fake.requests) == 3  # sent though nothing differs
 
 
+def test_an_update_taken_is_not_sent_again_while_the_name_server_catches_up_nor_forever():
+    """The review of 2026-11-21, item 26: an update taken was sent again on every pass until the name server showed it,
+    and forever for a host whose record never shows it (a CNAME)."""
+    fake, t = FakeNamecheap(), [1_000_000.0]
+    up = updater(fake, FakeDns(fake), t)
+
+    def lagging():  # the name server still holds the old address after each update taken
+        fake.ddns_records["home.hypokrites.me"] = "93.184.216.1"
+
+    def sent():
+        return len([r for r in fake.requests if "dynamicdns" in r["url"]])
+    lagging()
+    [h] = up.run_pass(config())
+    assert h["ok"] and sent() == 1
+    lagging()
+    for _ in range(3):  # passes every five minutes: not sent again, said why
+        t[0] += 300
+        [h] = up.run_pass(config())
+        assert sent() == 1 and f"{HOME} sent at" in h["result"] and "still shows 93.184.216.1" in h["result"]
+    t[0] = 1_000_000.0 + ddns.RETRY_S  # half an hour on and still not shown: sent once more
+    [h] = up.run_pass(config())
+    assert sent() == 2 and h["ok"]
+    lagging()
+    t[0] += ddns.RETRY_S
+    [h] = up.run_pass(config())  # never shown: said so, and not sent again
+    assert sent() == 2 and h["ok"] is False and "likely no A + Dynamic DNS record" in h["result"]
+    t[0] += 10 * ddns.RETRY_S
+    up.run_pass(config())
+    assert sent() == 2
+    [h] = up.run_pass(config(), force=True)  # Update now sends it
+    assert sent() == 3
+    t[0] += 300
+    [h] = up.run_pass(config())  # shown at last: unchanged, and a later change is sent at once again
+    assert h["result"] == "unchanged" and sent() == 3
+    lagging()
+    t[0] += 300
+    up.run_pass(config())
+    assert sent() == 4
+
+
 def test_without_the_address_an_update_goes_without_it_at_most_every_half_hour():
     fake, t = FakeNamecheap(), [1_000_000.0]
     up = updater(fake, FakeDns(fake, public=None), t)

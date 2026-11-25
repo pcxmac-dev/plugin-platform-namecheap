@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.3 (2026-11-24)
+
+Dynamic DNS no longer re-sends an update taken while the name server catches up (the review of 2026-11-21, item 26).
+Each pass compares this network's address with the host's A record at its domain's nameserver, and an update taken
+was sent again on every pass (every few minutes) until that record showed it, and forever for a host whose record
+never does (a CNAME, a URL redirect: no A + Dynamic DNS record). Now, once an update of an address is taken, it is
+not sent again within `RETRY_S` (half an hour) while the record still shows the old one, and the host says so ("sent
+at ... and taken; its name server still shows ..."); after `UNSEEN_MAX` (2) updates taken that it never came to show,
+it is said to be likely no A + Dynamic DNS record and not sent again until it shows the address or this network's
+address changes (Update now still sends it). Test: passes every five minutes over a lagging record send nothing; half
+an hour on, one more; then none, said so; Update now sends; once shown, a later change is sent at once.
+
 ## 0.3.2 (2026-11-14)
 
 Drawn under the platform's Cloud plugins section, in the list on the left, beside the cloud providers

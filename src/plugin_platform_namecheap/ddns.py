@@ -30,7 +30,8 @@ UPDATE_URL = "https://dynamicdns.park-your-domain.com/update"
 MYIP = ("myip.opendns.com", "A", "208.67.222.222")  # resolver1.opendns.com by its address: this network's IPv4 address
 MYIP_TXT = ("o-o.myaddr.l.google.com", "TXT", "216.239.32.10")  # ns1.google.com by its address: the same, as text
 FALLBACK_NS = "dns1.registrar-servers.com"  # Namecheap BasicDNS's, when the domain's own cannot be read
-RETRY_S = 1800.0  # an update without the address, or a failed one, at most this often
+RETRY_S = 1800.0  # an update without the address, or a failed one, at most this often; one taken, not again before this
+UNSEEN_MAX = 2  # updates taken that the host's record never came to show: then none is sent again until something changes
 NS_KEEP_S = 86400.0
 LOOKUP_S = 15.0
 UPDATE_S = 30.0
@@ -157,6 +158,7 @@ class HostState:
     sent: str | None = None  # the address last sent
     tried_at: float | None = None  # the last update sent, whatever came of it
     failed: bool = False
+    unseen: int = 0  # updates of `sent` taken, one after the other, that the host's record has not shown since
 
     def describe(self) -> dict:
         return {"host": self.fqdn, "address": self.address, "checkedAt": self.checked_at, "updatedAt": self.updated_at,
@@ -266,8 +268,24 @@ class Updater:
         recent = st.tried_at is not None and now - st.tried_at < RETRY_S
         if not force:
             if public and current is not None and public in current:
-                st.ok, st.result, st.address, st.failed = True, "unchanged", public, False
+                st.ok, st.result, st.address, st.failed, st.unseen = True, "unchanged", public, False, 0
                 return
+            if public and current is not None and st.sent == public and st.unseen and not st.failed:
+                # Taken, and the name server not showing it yet: not sent again on every pass while it catches up (the
+                # review of 2026-11-21, item 26), and a host whose record never shows it (a CNAME, a URL redirect: no
+                # A + Dynamic DNS record) is said so rather than sent to forever.
+                held = ", ".join(current) or "no A record"
+                if recent:
+                    st.result = (f"{public} sent at {clock_words(st.tried_at)} and taken; its name server still shows "
+                                 f"{held} (it catches up within its TTL): not sent again before "
+                                 f"{clock_words(st.tried_at + RETRY_S)}")
+                    return
+                if st.unseen >= UNSEEN_MAX:
+                    st.ok = False
+                    st.result = (f"{public} was sent {st.unseen} times and taken, yet its name server shows {held}: the "
+                                 "host is likely no A + Dynamic DNS record (a CNAME or a redirect?): not sent again until "
+                                 "it shows it or this network's address changes (Update now sends it)")
+                    return
             if public and recent and st.sent == public and (current is None or st.failed):
                 st.result = (f"{public} sent at {clock_words(st.tried_at)}; its record could not be read since"
                              if not st.failed else f"{st.result.split(' · ')[0]} · tried again after {clock_words(st.tried_at + RETRY_S)}")
@@ -277,6 +295,7 @@ class Updater:
                              f"{clock_words(st.tried_at)}, the next after half an hour")
                 return
         answer = self.send(h, password, public)
+        st.unseen = (st.unseen + 1 if st.sent == public and not st.failed else 1) if answer.ok and public else 0
         st.sent, st.tried_at, st.failed, st.ok = public, now, not answer.ok, answer.ok
         if answer.ok:
             st.updated_at = now
