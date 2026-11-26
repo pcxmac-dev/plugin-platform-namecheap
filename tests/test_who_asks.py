@@ -1,13 +1,14 @@
-"""Who may ask the plugin's changes (0.3.4; the independent review's PLT-H1 and the sweep of the plugins after it,
-2026-11-25). Its changes are asked only from its page (PAGE_ONLY_HOOKS, as liminal-libs 1.66.0's apps/asking.py and
-liminal-platform 0.34.0 read them): a record set or removed in a domain's zone, and a Dynamic DNS pass. Another plugin's
-ask is refused, and so is an ask that names no one; over HTTP the platform also asks its login whether you are at the
-page. Before, any program on this PC asked them of the platform with a header anyone can send, and the API key did the
-rest: the domain itself pointed at an address of the asker's, its SPF record removed, each with no second question (the
-one there is, for a zone with Dynamic DNS hosts, is only an argument). Its reads are asked by anyone, as before: the
-account, a domain's records, the balance, and whether a name is free. Asked through the library's own App (its ask names
-who asks as the platform's does), over the stand-in Namecheap and the stand-in resolver: nothing reaches Namecheap, a
-resolver or the network."""
+"""Who may ask the plugin's changes and whether a name is free (0.3.4; the independent review's PLT-H1 and the sweep of
+the plugins after it, 2026-11-25; 0.3.5, the user's choice of 2026-11-25: availability, which sends names of the asker's
+choosing to Namecheap under the API key, the page's too). Its changes are asked only from its page (PAGE_ONLY_HOOKS, as
+liminal-libs 1.66.0's apps/asking.py and liminal-platform 0.34.0 read them): a record set or removed in a domain's zone,
+and a Dynamic DNS pass. Another plugin's ask is refused, and so is an ask that names no one; over HTTP the platform also
+asks its login whether you are at the page. Before, any program on this PC asked them of the platform with a header
+anyone can send, and the API key did the rest: the domain itself pointed at an address of the asker's, its SPF record
+removed, each with no second question (the one there is, for a zone with Dynamic DNS hosts, is only an argument). Its
+reads are asked by anyone, as before: the account, a domain's records and the balance. Asked through the library's own
+App (its ask names who asks as the platform's does), over the stand-in Namecheap and the stand-in resolver: nothing
+reaches Namecheap, a resolver or the network."""
 from __future__ import annotations
 
 import pytest
@@ -21,7 +22,8 @@ from liminal_libs.machines.plugin import MachinePlugin  # noqa: E402
 from plugin_platform_namecheap import MACHINE  # noqa: E402
 
 CHANGES = ("set_record", "remove_record", "ddns_update")
-READS = ("present", "status", "refresh", "domains", "hosts", "availability", "balance")
+SENT_FOR_ANYONE = ("availability",)  # a read that sends the asker's words to Namecheap: the page's alone since 0.3.5
+READS = ("present", "status", "refresh", "domains", "hosts", "balance")
 SET_HOSTS = "namecheap.domains.dns.setHosts"  # the one command that writes a zone (all of it)
 ASKED = {  # each change as another program worded it: the hook's arguments
     "set_record": ("hypokrites.me", "@", "A", "203.0.113.99"),  # the domain itself, pointed at an address of the asker's
@@ -81,11 +83,11 @@ def attached(made):
 
 
 def test_its_changes_are_said_to_be_asked_only_from_its_page_and_its_reads_by_anyone():
-    assert set(internal.page_only(MACHINE)) == set(CHANGES)  # what the platform reads
+    assert set(internal.page_only(MACHINE)) == {*CHANGES, *SENT_FOR_ANYONE}  # what the platform reads
     assert internal.plugin_only(MACHINE) == ()
     assert internal.problems(MACHINE) == []  # each a hook of its own, and someone may ask it
-    assert set(CHANGES) | set(READS) == set(MACHINE.interface()["hooks"]) and set(ASKED) == set(CHANGES)
-    for hook in CHANGES:
+    assert {*CHANGES, *SENT_FOR_ANYONE, *READS} == set(MACHINE.interface()["hooks"]) and set(ASKED) == set(CHANGES)
+    for hook in (*CHANGES, *SENT_FOR_ANYONE):
         assert asking.refusal(MACHINE, hook, asking.PAGE) == ""
         assert asking.refusal(MACHINE, hook, "neighbour") == (f"namecheap's {hook} is asked only from its page, "
                                                               "never by another plugin: neighbour asked it.")
@@ -104,7 +106,6 @@ def test_another_plugin_or_no_one_asking_a_change_sends_nothing_and_its_page_doe
     assert neighbour.wants("present") is True and neighbour.wants("status")["valid"] is True  # its reads, as before
     assert [d["name"] for d in neighbour.wants("domains")] == ["hypokrites.me", "example.net"]
     assert len(neighbour.wants("hosts", "hypokrites.me")["records"]) == 7 and neighbour.wants("balance") is not None
-    assert [n["available"] for n in neighbour.wants("availability", "free-one.com", "taken.com")] == [True, False]
     assert app.on_its_own("refresh")["domains"] == 2 and writes(fake) == []
     for hook in CHANGES:  # the same asks from its page: each one sent
         sent = len(writes(fake))
@@ -113,6 +114,20 @@ def test_another_plugin_or_no_one_asking_a_change_sends_nothing_and_its_page_doe
     assert writes(fake) == SENT and fake.ddns_records == {"home.hypokrites.me": HOME}
     rows = {(h["name"], h["type"], h["address"]) for h in fake.zones["hypokrites.me"]["hosts"]}
     assert ("@", "A", "203.0.113.99") in rows and ("@", "TXT", "v=spf1 include:_spf.protonmail.ch ~all") not in rows
+
+
+def test_whether_a_name_is_free_is_asked_only_from_its_page(attached):
+    """availability (0.3.5): names of another plugin's choosing, or of no one named, are never sent to Namecheap under
+    the API key; the page's ask sends them, as before."""
+    app, plugin, neighbour, fake = attached
+    names = ("free-one.com", "taken.com")
+    for ask in (neighbour.wants, app.on_its_own):
+        with pytest.raises(asking.AskRefused, match="namecheap's availability is asked only from its page") as refused:
+            ask("availability", *names)
+        assert refused.value.status == 403 and refused.value.hook == "availability"
+    assert fake.requests == []  # no name sent
+    assert [n["available"] for n in app.from_page("availability", *names)] == [True, False]
+    assert [r["params"].get("Command") for r in fake.requests] == ["namecheap.domains.check"]
 
 
 def test_its_own_code_asks_nothing_of_the_app_and_runs_as_before(attached):

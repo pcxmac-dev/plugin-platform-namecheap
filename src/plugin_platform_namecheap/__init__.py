@@ -16,8 +16,9 @@ Who may ask its changes (0.3.4; the independent review's PLT-H1 and the sweep of
 record set or removed and a Dynamic DNS pass are asked only from its page (PAGE_ONLY_HOOKS): another plugin's ask is
 refused, and the platform asks its login whether you are at the page. Before, any program on this PC could ask them of the
 platform with a header anyone can send, and the API key did the rest; the second confirmation is an argument the asker
-sets. Its reads are asked by anyone (the account, a domain's records, the balance, whether a name is free). The background
-and the command line call the same code themselves: those are not asks.
+sets. Whether a name is free is the page's too (0.3.5, the user's choice of 2026-11-25): it sends names of the asker's
+choosing to Namecheap under your API key. Its other reads are asked by anyone (the account, a domain's records, the
+balance). The background and the command line call the same code themselves: those are not asks.
 
     python -m plugin_platform_namecheap ip | status | domains | hosts DOMAIN | set DOMAIN HOST TYPE ADDRESS [--ttl N] [--mx N]
         | remove DOMAIN HOST TYPE [ADDRESS] | restore DOMAIN FILE | backups [DOMAIN] | check NAME... | balance | ddns [--now]
@@ -38,7 +39,7 @@ from . import zone as zones
 from .api import LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
 from .settings import API_KEY, API_USER, DDNS_HOSTS, DDNS_PASSWORD, KEYS, NAMES, Config
 
-__version__ = "0.3.4"
+__version__ = "0.3.5"
 REFRESH_S = 900.0  # the account read again at most this often while attached (or by Refresh)
 CONFIG_S = 30.0  # the settings asked of the login again after this long
 RETRY_S = 900.0  # a part that failed is taken as untried after this long while detached: attached again, it is tried again
@@ -165,9 +166,11 @@ class NamecheapPlugin(MachinePlugin):
     # its login shows that you are at the page. Before, any program on this PC could ask them of the platform with a header
     # anyone can send, the page's dialogs being the only confirmation (the second one, accept_ddns_reset, is an argument
     # the asker sets): a zone written with a record of its choosing, or without one of yours, with your API key. The
-    # background's reads and Dynamic DNS passes and the command line call the code directly, not through an ask; its reads
-    # (refresh, domains, hosts, balance, and availability, which buys nothing) are asked by anyone.
-    PAGE_ONLY_HOOKS = ("set_record", "remove_record", "ddns_update")
+    # background's reads and Dynamic DNS passes and the command line call the code directly, not through an ask.
+    # availability is the page's too (0.3.5, the user's choice of 2026-11-25, "Root reads and Namecheap"): it buys
+    # nothing, yet it sends names of the asker's choosing to Namecheap under your API key, up to 50 an ask, each a call
+    # of the account's. Its other reads (refresh, domains, hosts, balance) are asked by anyone.
+    PAGE_ONLY_HOOKS = ("set_record", "remove_record", "ddns_update", "availability")
     keys = KEYS
     signup = "https://www.namecheap.com/support/api/intro/"
     limits = ("Namecheap's API: about 20 requests a minute, 700 an hour and 8,000 a day per key (the lower kept); "

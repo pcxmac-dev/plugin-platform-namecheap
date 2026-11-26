@@ -16,8 +16,9 @@
     balance                                  the account's funds
     ddns [--now]                             a Dynamic DNS pass: an update where a host differs (--now: for every host)
 
---json prints the answer as JSON. The platform asks the plugin's changes only from its page (PAGE_ONLY_HOOKS, 0.3.4); this
-command line asks the platform nothing: it calls the same code in its own process, with this shell's settings, as before."""
+--json prints the answer as JSON. The platform asks the plugin's changes and availability only from its page
+(PAGE_ONLY_HOOKS, 0.3.4 and 0.3.5); this command line asks the platform nothing: it calls the same code in its own
+process, with this shell's settings, as before."""
 from __future__ import annotations
 
 import argparse

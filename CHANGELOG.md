@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.5 (2026-11-26)
+
+Whether a name is free is asked only from the page (the user's choice of 2026-11-25, "Root reads and Namecheap").
+
+- **`availability` is page-only** (`PAGE_ONLY_HOOKS`, beside the three changes). It buys nothing, yet it sends the
+  names it is given to Namecheap (`namecheap.domains.check`, up to 50 an ask) under your API key, from this machine's
+  address, each a call the account makes. Before, another plugin, or a program on this PC over HTTP with a header
+  anyone can send, chose the names and spent the calls. Now another plugin's ask is refused (403), and so is one that
+  names no one; liminal-platform 0.34.0 refuses one over HTTP (401) unless its login shows that you are at the page.
+  The same caveat as 0.3.4's: a local login signs `secret` and `default` in with no password, so a program that signs
+  itself in asks it still.
+- The page draws no form for it today; the command line's `check NAME...` calls the code itself, as before.
+- Asked by anyone, as before: `present`, `status`, `refresh`, `domains`, `hosts` and `balance`.
+- Tests: `tests/test_who_asks.py` names `availability` among the page's hooks, so taking it out fails it: refused to
+  another plugin and to no one with no request made, and answered when the page asks it.
+- `__version__` is 0.3.5, as pyproject says.
+
 ## 0.3.4 (2026-11-25)
 
 Its changes are asked only from the page (`PAGE_ONLY_HOOKS`, liminal-libs 1.66.0's word): the independent review's
