@@ -22,7 +22,7 @@ from liminal_libs.machines.plugin import MachinePlugin  # noqa: E402
 from plugin_platform_namecheap import MACHINE  # noqa: E402
 
 CHANGES = ("set_record", "remove_record", "ddns_update")
-SENT_FOR_ANYONE = ("availability",)  # a read that sends the asker's words to Namecheap: the page's alone since 0.3.5
+SENT_FOR_ANYONE = ("availability", "check_names")  # check_names: the page's Check a name form (0.3.6)  # a read that sends the asker's words to Namecheap: the page's alone since 0.3.5
 READS = ("present", "status", "refresh", "domains", "hosts", "balance")
 SET_HOSTS = "namecheap.domains.dns.setHosts"  # the one command that writes a zone (all of it)
 ASKED = {  # each change as another program worded it: the hook's arguments
@@ -127,6 +127,18 @@ def test_whether_a_name_is_free_is_asked_only_from_its_page(attached):
         assert refused.value.status == 403 and refused.value.hook == "availability"
     assert fake.requests == []  # no name sent
     assert [n["available"] for n in app.from_page("availability", *names)] == [True, False]
+    assert [r["params"].get("Command") for r in fake.requests] == ["namecheap.domains.check"]
+
+
+def test_check_a_name_is_asked_only_from_its_page(attached):
+    """check_names (0.3.6), the page's Check a name form: refused to another plugin and to no one, nothing sent; the
+    page's ask sends the names, once."""
+    app, plugin, neighbour, fake = attached
+    for ask in (neighbour.wants, app.on_its_own):
+        with pytest.raises(asking.AskRefused, match="namecheap's check_names is asked only from its page"):
+            ask("check_names", "free-one.com taken.com")
+    assert fake.requests == []
+    assert app.from_page("check_names", "free-one.com taken.com")["said"].startswith("1 of 2 names are free")
     assert [r["params"].get("Command") for r in fake.requests] == ["namecheap.domains.check"]
 
 

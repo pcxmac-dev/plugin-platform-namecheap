@@ -118,7 +118,8 @@ quarter of an hour later (the platform attaches it again and it is tried again),
 
 `present`, `status` (the summary, the facts, `tables`, `actions`, `forms`), `refresh()`, `domains()`, `hosts(domain)`,
 `set_record(domain, host, rtype, address, ttl=None, mx=None, accept_ddns_reset=False)`,
-`remove_record(domain, host, rtype, address=None, accept_ddns_reset=False)`, `availability(*names)`, `balance()`,
+`remove_record(domain, host, rtype, address=None, accept_ddns_reset=False)`, `availability(*names)`,
+`check_names(names)` (the page's Check a name form, 0.3.6), `balance()`,
 `ddns_update(force=True)`. A write's report: `said`, `lines` (its words), `ok`, `missing`, `unexpected`, `ddnsLost`,
 `backup`, `restore`.
 
@@ -126,7 +127,7 @@ quarter of an hour later (the platform attaches it again and it is tried again),
 `ddns_update`. Another plugin's ask of one is refused, and over HTTP the platform refuses one unless its login shows
 that you are at the page (liminal-libs 1.66.0 and liminal-platform 0.34.0 read the word; what is older than those asks
 them as before). So is `availability(*names)` since 0.3.5: it buys nothing, yet it sends names of the asker's choosing
-to Namecheap under your API key. `present`, `status`, `refresh()`, `domains()`, `hosts(domain)` and `balance()` are
+to Namecheap under your API key; and `check_names(names)`, the same ask from the page's form, since 0.3.6. `present`, `status`, `refresh()`, `domains()`, `hosts(domain)` and `balance()` are
 asked by anyone. The plugin's own background (its reads, its Dynamic DNS checks) and its command
 line call the code themselves: they are not asks. The platform's check rests on its login's word that your browser is
 signed in, and a local login signs `secret` and `default` in with no password: it does not stop a program on this PC

@@ -72,7 +72,8 @@ def test_the_status_is_what_was_read_last_with_its_tables_and_actions_and_no_val
     assert domains["rows"][1][4] == "elsewhere" and domains["rows"][0][5] == "on"
     assert records["rows"][0][:3] == ["@", "MX", "mail.protonmail.ch."] and "mail: custom MX" in records["note"]
     assert st["actions"][0]["hook"] == "refresh" and st["actions"][0]["args"] == []
-    assert st["actions"][1] == {"form": "ddns-now", "title": "Update DNS now"}  # asked first (0.3.1)
+    assert st["actions"][1]["form"] == "check-name"  # Check a name (0.3.6): asked at once, it changes nothing
+    assert st["actions"][2] == {"form": "ddns-now", "title": "Update DNS now"}  # asked first (0.3.1)
     now = next(f for f in st["forms"] if f["id"] == "ddns-now")
     assert now["hook"] == "ddns_update" and now["fields"] == [] and now["confirm"]["yes"] == "Update now"
     text = json.dumps(st)

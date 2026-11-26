@@ -26,6 +26,7 @@ balance). The background and the command line call the same code themselves: tho
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -36,10 +37,10 @@ from . import apis as cards
 from . import ddns
 from . import settings as settings_mod
 from . import zone as zones
-from .api import LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
+from .api import CHECK_MAX, LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
 from .settings import API_KEY, API_USER, DDNS_HOSTS, DDNS_PASSWORD, KEYS, NAMES, Config
 
-__version__ = "0.3.5"
+__version__ = "0.3.6"
 REFRESH_S = 900.0  # the account read again at most this often while attached (or by Refresh)
 CONFIG_S = 30.0  # the settings asked of the login again after this long
 RETRY_S = 900.0  # a part that failed is taken as untried after this long while detached: attached again, it is tried again
@@ -160,7 +161,7 @@ class NamecheapPlugin(MachinePlugin):
     ICON = "namecheap"  # Namecheap's N (liminal-libs 1.33.0's icons.js)
     SECTION = "cloud"  # drawn under the platform's Cloud plugins: a cloud service (liminal-platform 0.25.0)
     HOOKS = (*MachinePlugin.HOOKS, "refresh", "domains", "hosts", "set_record", "remove_record", "availability",
-             "ddns_update", "balance")
+             "check_names", "ddns_update", "balance")
     # Its changes, asked only from its page (0.3.4, the sweep after the review's PLT-H1; liminal-libs 1.66.0's
     # apps/asking.py): another plugin's ask is refused (403), and liminal-platform 0.34.0 refuses one over HTTP (401) unless
     # its login shows that you are at the page. Before, any program on this PC could ask them of the platform with a header
@@ -170,7 +171,8 @@ class NamecheapPlugin(MachinePlugin):
     # availability is the page's too (0.3.5, the user's choice of 2026-11-25, "Root reads and Namecheap"): it buys
     # nothing, yet it sends names of the asker's choosing to Namecheap under your API key, up to 50 an ask, each a call
     # of the account's. Its other reads (refresh, domains, hosts, balance) are asked by anyone.
-    PAGE_ONLY_HOOKS = ("set_record", "remove_record", "ddns_update", "availability")
+    # check_names (0.3.6) is availability as the page's "Check a name" form asks it: the page's alone, the same way.
+    PAGE_ONLY_HOOKS = ("set_record", "remove_record", "ddns_update", "availability", "check_names")
     keys = KEYS
     signup = "https://www.namecheap.com/support/api/intro/"
     limits = ("Namecheap's API: about 20 requests a minute, 700 an hour and 8,000 a day per key (the lower kept); "
@@ -326,6 +328,34 @@ class NamecheapPlugin(MachinePlugin):
     def availability(self, *names: str) -> list[dict]:
         """Whether names are free to register (read only: nothing is bought)."""
         return self.client().availability(names)
+
+    def check_names(self, names: str | None = None) -> dict:
+        """The page's "Check a name" form (0.3.6): names typed apart by spaces, commas or lines, each asked of Namecheap
+        (availability: domains.check, read only, nothing bought), the answer in words for the page's dialog."""
+        wanted: list[str] = []
+        for n in re.split(r"[\s,;]+", str(names or "")):
+            if n and n.lower() not in (w.lower() for w in wanted):
+                wanted.append(n)
+        if not wanted:
+            return {"ok": False, "said": "name a domain to check, such as example.com"}
+        try:
+            found = self.availability(*wanted)
+        except ValueError as e:  # not a domain name, or more than domains.check takes at once
+            return {"ok": False, "said": str(e)}
+        lines = []
+        for a in found:
+            line = f"{a['domain']}: " + ("free" if a["available"] else "taken")
+            if a["premium"]:
+                line += f", a premium name ({a['premiumPrice']} to register)" if a["premiumPrice"] else ", a premium name"
+            if a.get("note"):
+                line += f" ({a['note']})"
+            lines.append(line)
+        if len(found) == 1:
+            said = f"{found[0]['domain']} is " + ("free to register" if found[0]["available"] else "taken")
+        else:
+            said = f"{sum(1 for a in found if a['available'])} of {len(found)} names are free to register"
+        return {"ok": True, "said": said + ". Nothing was bought.",
+                "lines": lines if len(found) > 1 or (found and found[0]["premium"]) else []}
 
     def balance(self) -> dict:
         """The account's funds, read now."""
@@ -527,8 +557,12 @@ class NamecheapPlugin(MachinePlugin):
                                              "words": ("An update is sent now for every Dynamic DNS host, with this network's "
                                                        "address, whether its record differs or not."),
                                              "yes": "Update now"}})
+        if cfg.api_ready:  # Check a name (0.3.6): whether names are free, asked at once (it changes nothing)
+            out["forms"].append(self._check_form())
         out["actions"] = ([{"hook": "refresh", "args": [], "title": "Refresh",
-                            "note": "the domains, the balance and the records read again now (a few requests)"}] if cfg.api_ready else []) + \
+                            "note": "the domains, the balance and the records read again now (a few requests)"},
+                           {"form": "check-name", "title": "Check a name…",
+                            "note": "whether domain names are free to register (nothing is bought)"}] if cfg.api_ready else []) + \
                          ([{"form": "ddns-now", "title": "Update DNS now"}] if cfg.ddns_ready else [])
         return out
 
@@ -607,6 +641,17 @@ class NamecheapPlugin(MachinePlugin):
         """Whether the page offers writes over a zone as read: the API set up and nothing in it that a write would lose
         (zone.unwritable; Dynamic DNS hosts are asked of the user instead)."""
         return bool(cfg.api_ready) and isinstance(z, Zone) and zones.unwritable(z) is None
+
+    @staticmethod
+    def _check_form() -> dict:
+        """The "Check a name" form (0.3.6): one text field, the names; asked at once (confirm false: it changes nothing),
+        its answer said in the dialog. The names typed are sent to Namecheap (domains.check) under your API key."""
+        return {"id": "check-name", "hook": "check_names", "title": "Check a name",
+                "note": (f"Whether domain names are free to register. Up to {CHECK_MAX} at once, apart by spaces or commas; "
+                         "they are sent to Namecheap under your API key, as one request. Nothing is bought."),
+                "fields": [{"name": "names", "label": "Names", "type": "text", "required": True,
+                            "placeholder": "example.com, example.net"}],
+                "submit": "Check", "confirm": False}
 
     @staticmethod
     def _forms(z: Zone) -> list[dict]:

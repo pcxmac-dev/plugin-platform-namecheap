@@ -20,8 +20,8 @@ def test_its_settings_are_pairs_named_by_their_variables_and_nothing_spends():
                                          "namecheap-ddns-minutes"]
     assert {k.name for k in p.keys if k.secret} == {"NAMECHEAP_API_KEY", "NAMECHEAP_DDNS_PASSWORD"}
     hooks = p.interface()["hooks"]
-    assert {"present", "status", "refresh", "domains", "hosts", "set_record", "remove_record", "availability", "ddns_update",
-            "balance"} <= set(hooks)
+    assert {"present", "status", "refresh", "domains", "hosts", "set_record", "remove_record", "availability", "check_names",
+            "ddns_update", "balance"} <= set(hooks)
     assert "check" not in hooks  # the platform's check is a plugin's check of this PC for an install: not this
     import inspect
 

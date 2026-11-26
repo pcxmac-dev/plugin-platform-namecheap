@@ -38,6 +38,11 @@ def zone_table(status: dict, domain="hypokrites.me") -> dict:
     return next(t for t in status["tables"] if t["title"] == f"{domain} records")
 
 
+def zone_forms(status: dict) -> list[dict]:
+    """The forms that write a zone: every form but Check a name (0.3.6), which reads only."""
+    return [f for f in status["forms"] if f["id"] != "check-name"]
+
+
 def forms_of(status: dict) -> dict:
     return {f["id"]: f for f in status["forms"]}
 
@@ -45,10 +50,10 @@ def forms_of(status: dict) -> dict:
 def test_each_zone_shown_has_a_set_form_and_a_remove_on_each_record(made, env):
     env(settings_of())
     p, fake, _ = made()
-    assert p.status()["forms"] == []  # nothing read yet: nothing to write over
+    assert zone_forms(p.status()) == []  # nothing read yet: nothing to write over
     p.refresh()
     st = p.status()
-    forms = forms_of(st)
+    forms = {f["id"]: f for f in zone_forms(st)}
     assert list(forms) == ["set:hypokrites.me", "remove:hypokrites.me"]  # example.net is not on Namecheap's DNS: not read
     hooks = p.interface()["hooks"]
     for f in forms.values():
@@ -153,7 +158,7 @@ def test_a_zone_every_write_would_be_refused_has_no_form_and_says_why(made, env)
     p.refresh()
     st = p.status()
     table = zone_table(st)
-    assert st["forms"] == [] and "actions" not in table and len(table["columns"]) == 6
+    assert zone_forms(st) == [] and "actions" not in table and len(table["columns"]) == 6
     assert table["note"].endswith("not written here: hypokrites.me holds CAA records, which setHosts cannot take back as they are: "
                                   "a write would lose them, so none is made (change them in Namecheap's dashboard)")
     assert all(not isinstance(c, dict) or "form" not in c for r in table["rows"] for c in r)
@@ -194,3 +199,31 @@ def test_a_second_confirmation_counts_only_when_exactly_true():
 
     source = inspect.getsource(module.NamecheapPlugin)
     assert source.count("accept_ddns_reset=accept_ddns_reset is True") == 2 and "bool(accept_ddns_reset)" not in source
+
+
+def test_check_a_name_form_is_offered_once_the_api_is_set_up_and_says_the_answer(made, env):
+    """Check a name (0.3.6, the user's "Add it later" of 2026-11-26): a form of one text field, asked at once (it changes
+    nothing), its answer in words for the dialog; the names typed sent to Namecheap as one domains.check."""
+    env(settings_of(api=False, ddns=True))
+    p, fake, _ = made()
+    assert "check-name" not in forms_of(p.status())  # no API key: nothing to ask with
+    env(settings_of())
+    p, fake, _ = made()
+    st = p.status()
+    form = forms_of(st)["check-name"]
+    assert form["hook"] == "check_names" and form["confirm"] is False and [x["name"] for x in form["fields"]] == ["names"]
+    assert {"form": "check-name", "title": "Check a name…"}.items() <= next(a for a in st["actions"] if a.get("form") == "check-name").items()
+    params = inspect.signature(p.check_names).parameters
+    assert list(params) == [x["name"] for x in form["fields"]]
+    one = p.check_names(*page_args(form, {"names": "free-one.com"}))
+    assert one == {"ok": True, "said": "free-one.com is free to register. Nothing was bought.", "lines": []}
+    many = p.check_names("free-one.com, taken.com\nFREE-ONE.com  free-premium.io")
+    assert many["said"] == "2 of 3 names are free to register. Nothing was bought."
+    assert many["lines"] == ["free-one.com: free", "taken.com: taken", "free-premium.io: free, a premium name (13000.0000 to register)"]
+    checks = [r for r in fake.requests if r["params"].get("Command") == "namecheap.domains.check"]
+    assert [r["params"]["DomainList"] for r in checks] == ["free-one.com", "free-one.com,taken.com,free-premium.io"]
+    sent = len(fake.requests)
+    assert p.check_names("") == {"ok": False, "said": "name a domain to check, such as example.com"}
+    assert p.check_names("not a domain!")["ok"] is False
+    assert p.check_names(" ".join(f"n{i}.com" for i in range(51)))["said"] == "at most 50 domains are checked at once"
+    assert len(fake.requests) == sent  # nothing sent for what was refused

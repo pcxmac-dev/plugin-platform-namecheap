@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.6 (2026-11-26)
+
+A **Check a name** form on the plugin's page (the user's "Add it later" of 2026-11-26, after 0.3.5 made the check the
+page's alone).
+
+- Once the API is set up, the page's actions hold **Check a name…**: one field, the names (up to 50, apart by spaces,
+  commas or lines, a name typed twice asked once). It is asked at once (it changes nothing, so there is no second
+  step), and the dialog says the answer: "example.com is free to register", or "2 of 3 names are free to register"
+  with a line for each, a premium name with its price. Nothing is bought. The names are sent to Namecheap as one
+  `namecheap.domains.check` under your API key; a name that is not a domain, or more than 50, is refused before
+  anything is sent.
+- The new hook `check_names(names)` is page-only (`PAGE_ONLY_HOOKS`) like `availability`: refused to another plugin
+  and to an ask that names no one.
+- Tests: `tests/test_forms.py` (the form, its answer in words, what is sent, what is refused before sending) and
+  `tests/test_who_asks.py` (refused to another plugin and to no one, nothing sent; sent from the page). Taking
+  `check_names` out of `PAGE_ONLY_HOOKS` fails both.
+
 ## 0.3.5 (2026-11-26)
 
 Whether a name is free is asked only from the page (the user's choice of 2026-11-25, "Root reads and Namecheap").
