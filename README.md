@@ -122,6 +122,15 @@ quarter of an hour later (the platform attaches it again and it is tried again),
 `ddns_update(force=True)`. A write's report: `said`, `lines` (its words), `ok`, `missing`, `unexpected`, `ddnsLost`,
 `backup`, `restore`.
 
+**The changes are asked only from the plugin's page** (`PAGE_ONLY_HOOKS`, 0.3.4): `set_record`, `remove_record` and
+`ddns_update`. Another plugin's ask of one is refused, and over HTTP the platform refuses one unless its login shows
+that you are at the page (liminal-libs 1.66.0 and liminal-platform 0.34.0 read the word; what is older than those asks
+them as before). `present`, `status`, `refresh()`, `domains()`, `hosts(domain)`, `balance()` and `availability(*names)`
+(which buys nothing) are asked by anyone. The plugin's own background (its reads, its Dynamic DNS checks) and its command
+line call the code themselves: they are not asks. The platform's check rests on its login's word that your browser is
+signed in, and a local login signs `secret` and `default` in with no password: it does not stop a program on this PC
+that signs itself in.
+
 ## From the command line
 
 Its settings read from the environment (as this shell has them):

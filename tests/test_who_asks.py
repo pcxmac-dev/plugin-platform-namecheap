@@ -1,0 +1,125 @@
+"""Who may ask the plugin's changes (0.3.4; the independent review's PLT-H1 and the sweep of the plugins after it,
+2026-11-25). Its changes are asked only from its page (PAGE_ONLY_HOOKS, as liminal-libs 1.66.0's apps/asking.py and
+liminal-platform 0.34.0 read them): a record set or removed in a domain's zone, and a Dynamic DNS pass. Another plugin's
+ask is refused, and so is an ask that names no one; over HTTP the platform also asks its login whether you are at the
+page. Before, any program on this PC asked them of the platform with a header anyone can send, and the API key did the
+rest: the domain itself pointed at an address of the asker's, its SPF record removed, each with no second question (the
+one there is, for a zone with Dynamic DNS hosts, is only an argument). Its reads are asked by anyone, as before: the
+account, a domain's records, the balance, and whether a name is free. Asked through the library's own App (its ask names
+who asks as the platform's does), over the stand-in Namecheap and the stand-in resolver: nothing reaches Namecheap, a
+resolver or the network."""
+from __future__ import annotations
+
+import pytest
+
+pytest.importorskip("liminal_libs.apps.asking", reason="no hook is asked only from its page before liminal-libs 1.66.0")
+
+from conftest import HOME, settings_of  # noqa: E402 - after the skip, as each of these
+from liminal_libs import internal  # noqa: E402
+from liminal_libs.apps import App, EnvironmentLogin, asking  # noqa: E402
+from liminal_libs.machines.plugin import MachinePlugin  # noqa: E402
+from plugin_platform_namecheap import MACHINE  # noqa: E402
+
+CHANGES = ("set_record", "remove_record", "ddns_update")
+READS = ("present", "status", "refresh", "domains", "hosts", "availability", "balance")
+SET_HOSTS = "namecheap.domains.dns.setHosts"  # the one command that writes a zone (all of it)
+ASKED = {  # each change as another program worded it: the hook's arguments
+    "set_record": ("hypokrites.me", "@", "A", "203.0.113.99"),  # the domain itself, pointed at an address of the asker's
+    "remove_record": ("hypokrites.me", "@", "TXT", "v=spf1 include:_spf.protonmail.ch ~all"),  # its mail's SPF record
+    "ddns_update": (),
+}
+SENT = [SET_HOSTS, SET_HOSTS, "a Dynamic DNS update"]  # what the same asks send from the page, in CHANGES' order
+
+
+def writes(fake) -> list[str]:
+    """The requests that change something: a zone written, and a Dynamic DNS update (which is no API command)."""
+    return [r["params"].get("Command") or "a Dynamic DNS update" for r in fake.requests
+            if r["params"].get("Command") in (None, SET_HOSTS)]
+
+
+class Neighbour(MachinePlugin):
+    """Another plugin of the platform, asking Namecheap's through its app as any plugin may (a container plugin, or the
+    MCP plugin for a local agent)."""
+
+    name, title = "neighbour", "Neighbour"
+
+    def wants(self, hook, *args):
+        """Not a hook: one of Namecheap's asked through the app."""
+        return self.app.ask("namecheap", hook, *args)
+
+
+class Platform(App):
+    """The library's App asking as the platform does: from its page's route, the page named in so many words, or from
+    its own code, no one named. It holds the plugin as the platform's one-shot commands do (`once`): the plugin's
+    background reads and Dynamic DNS passes are not started, so every request the stand-in sees is an ask's."""
+
+    NAME, TITLE, ICON = "platform", "Platform", "chip"
+    once = True
+
+    def from_page(self, hook, *args):
+        """As the page's route asks a hook."""
+        with asking.asking(asking.PAGE):
+            return self.ask("namecheap", hook, *args)
+
+    def on_its_own(self, hook, *args):
+        """As the app's own code asks a hook."""
+        return self.ask("namecheap", hook, *args)
+
+
+@pytest.fixture
+def attached(made):
+    """The plugin over the stand-ins, attached with another plugin to an app whose login holds its settings (the API key,
+    a Dynamic DNS host and its password); let go after."""
+    plugin, fake, dns = made()
+    neighbour = Neighbour()
+    app = Platform(log=lambda m: None, login=EnvironmentLogin(env=settings_of(ddns=True)))
+    app.attach(plugin)
+    app.attach(neighbour)
+    yield app, plugin, neighbour, fake
+    app.detach(neighbour.name)
+    app.detach(plugin.name)
+
+
+def test_its_changes_are_said_to_be_asked_only_from_its_page_and_its_reads_by_anyone():
+    assert set(internal.page_only(MACHINE)) == set(CHANGES)  # what the platform reads
+    assert internal.plugin_only(MACHINE) == ()
+    assert internal.problems(MACHINE) == []  # each a hook of its own, and someone may ask it
+    assert set(CHANGES) | set(READS) == set(MACHINE.interface()["hooks"]) and set(ASKED) == set(CHANGES)
+    for hook in CHANGES:
+        assert asking.refusal(MACHINE, hook, asking.PAGE) == ""
+        assert asking.refusal(MACHINE, hook, "neighbour") == (f"namecheap's {hook} is asked only from its page, "
+                                                              "never by another plugin: neighbour asked it.")
+        assert asking.refusal(MACHINE, hook, None).endswith("This ask names no asker: neither the page nor a plugin.")
+    for hook in READS:
+        assert {asking.refusal(MACHINE, hook, who) for who in (asking.PAGE, "neighbour", None)} == {""}
+
+
+def test_another_plugin_or_no_one_asking_a_change_sends_nothing_and_its_page_does(attached):
+    app, plugin, neighbour, fake = attached
+    for hook in CHANGES:
+        for ask in (neighbour.wants, app.on_its_own):
+            with pytest.raises(asking.AskRefused, match=f"namecheap's {hook} is asked only from its page"):
+                ask(hook, *ASKED[hook])
+    assert fake.requests == [] and fake.ddns_records == {}  # nothing sent, nor read: not the read a change makes first
+    assert neighbour.wants("present") is True and neighbour.wants("status")["valid"] is True  # its reads, as before
+    assert [d["name"] for d in neighbour.wants("domains")] == ["hypokrites.me", "example.net"]
+    assert len(neighbour.wants("hosts", "hypokrites.me")["records"]) == 7 and neighbour.wants("balance") is not None
+    assert [n["available"] for n in neighbour.wants("availability", "free-one.com", "taken.com")] == [True, False]
+    assert app.on_its_own("refresh")["domains"] == 2 and writes(fake) == []
+    for hook in CHANGES:  # the same asks from its page: each one sent
+        sent = len(writes(fake))
+        assert app.from_page(hook, *ASKED[hook]) is not None
+        assert len(writes(fake)) == sent + 1, hook
+    assert writes(fake) == SENT and fake.ddns_records == {"home.hypokrites.me": HOME}
+    rows = {(h["name"], h["type"], h["address"]) for h in fake.zones["hypokrites.me"]["hosts"]}
+    assert ("@", "A", "203.0.113.99") in rows and ("@", "TXT", "v=spf1 include:_spf.protonmail.ch ~all") not in rows
+
+
+def test_its_own_code_asks_nothing_of_the_app_and_runs_as_before(attached):
+    """The background's Dynamic DNS pass and the command line call the plugin's code themselves: not an ask, so no asker
+    is named and none is needed."""
+    app, plugin, neighbour, fake = attached
+    assert asking.asker() is None
+    (home,) = plugin.ddns_update(force=False)
+    assert home["host"] == "home.hypokrites.me" and writes(fake) == ["a Dynamic DNS update"]
+    assert fake.ddns_records == {"home.hypokrites.me": HOME}

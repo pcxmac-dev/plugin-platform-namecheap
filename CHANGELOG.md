@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.4 (2026-11-25)
+
+Its changes are asked only from the page (`PAGE_ONLY_HOOKS`, liminal-libs 1.66.0's word): the independent review's
+finding PLT-H1, and the sweep of every plugin's hooks that followed it. The user, 2026-11-25, chose "Plugin releases":
+each plugin says which of its hooks only its page asks.
+
+- **What only the page asks**: `set_record`, `remove_record` and `ddns_update`. Another plugin's ask of one is refused
+  (403), and so is an ask that names no asker; liminal-platform 0.34.0 refuses one over HTTP (401) unless its login
+  shows that you are at the page. A platform that holds no login asks them as before. The 401 rests on the login's
+  word that your browser is signed in, and a local login signs `secret` and `default` in with no password, so a
+  program on this PC can sign itself in and ask them still: a proof that a program cannot make is the login's and the
+  platform's to give, not this plugin's.
+- **Before**, the platform handed an ask of any program on this PC (`POST /api/machines/namecheap/ask`, with a header
+  anyone can send and a Host the client chooses, no sign-in) straight to the hook it named, and the hook used your API
+  key. The page's dialog was the only confirmation: `set_record` with `[domain, "@", "A", address]` pointed the domain
+  itself at an address of the asker's, and `remove_record` took out a record (the SPF record of a domain's mail,
+  say), each a whole zone written, asked once. The one second confirmation there is, for a zone holding Dynamic DNS
+  hosts (`accept_ddns_reset`), is an argument the asker sets. `ddns_update` sent an update for every Dynamic DNS host.
+- **As before**: its reads are asked by anyone: `present`, `status`, `refresh`, `domains`, `hosts`, `balance`, and
+  `availability`, which asks Namecheap whether the names given are free and buys nothing. The background (the account
+  read every quarter of an hour, the Dynamic DNS checks) and the command line (`restore` among its commands, which is
+  no hook) call the plugin's code themselves, not through an ask. The library floor stays 1.49.0: a library before
+  1.66.0 does not read the word, and asks the hooks as it did.
+- Tests: `tests/test_who_asks.py`, through the library's own App over the stand-in Namecheap and resolver: each of the
+  three refused to another plugin and to no one, no request made; the same three asked from the page, each sent; the
+  reads answered to a plugin; a Dynamic DNS pass run by the plugin's own code. A hook taken out of `PAGE_ONLY_HOOKS`
+  fails it. Skipped on a library before 1.66.0.
+
 ## 0.3.3 (2026-11-24)
 
 Dynamic DNS no longer re-sends an update taken while the name server catches up (the review of 2026-11-21, item 26).

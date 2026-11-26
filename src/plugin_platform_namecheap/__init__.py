@@ -12,6 +12,13 @@ tables, its actions (Refresh, Update DNS now) and its forms (liminal-platform 0.
 a Remove on each of its records, each asked once the user has confirmed the change, a zone with Dynamic DNS hosts only
 once the user has accepted that too.
 
+Who may ask its changes (0.3.4; the independent review's PLT-H1 and the sweep of the plugins after it, 2026-11-25): a
+record set or removed and a Dynamic DNS pass are asked only from its page (PAGE_ONLY_HOOKS): another plugin's ask is
+refused, and the platform asks its login whether you are at the page. Before, any program on this PC could ask them of the
+platform with a header anyone can send, and the API key did the rest; the second confirmation is an argument the asker
+sets. Its reads are asked by anyone (the account, a domain's records, the balance, whether a name is free). The background
+and the command line call the same code themselves: those are not asks.
+
     python -m plugin_platform_namecheap ip | status | domains | hosts DOMAIN | set DOMAIN HOST TYPE ADDRESS [--ttl N] [--mx N]
         | remove DOMAIN HOST TYPE [ADDRESS] | restore DOMAIN FILE | backups [DOMAIN] | check NAME... | balance | ddns [--now]
 """
@@ -31,7 +38,7 @@ from . import zone as zones
 from .api import LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
 from .settings import API_KEY, API_USER, DDNS_HOSTS, DDNS_PASSWORD, KEYS, NAMES, Config
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 REFRESH_S = 900.0  # the account read again at most this often while attached (or by Refresh)
 CONFIG_S = 30.0  # the settings asked of the login again after this long
 RETRY_S = 900.0  # a part that failed is taken as untried after this long while detached: attached again, it is tried again
@@ -153,6 +160,14 @@ class NamecheapPlugin(MachinePlugin):
     SECTION = "cloud"  # drawn under the platform's Cloud plugins: a cloud service (liminal-platform 0.25.0)
     HOOKS = (*MachinePlugin.HOOKS, "refresh", "domains", "hosts", "set_record", "remove_record", "availability",
              "ddns_update", "balance")
+    # Its changes, asked only from its page (0.3.4, the sweep after the review's PLT-H1; liminal-libs 1.66.0's
+    # apps/asking.py): another plugin's ask is refused (403), and liminal-platform 0.34.0 refuses one over HTTP (401) unless
+    # its login shows that you are at the page. Before, any program on this PC could ask them of the platform with a header
+    # anyone can send, the page's dialogs being the only confirmation (the second one, accept_ddns_reset, is an argument
+    # the asker sets): a zone written with a record of its choosing, or without one of yours, with your API key. The
+    # background's reads and Dynamic DNS passes and the command line call the code directly, not through an ask; its reads
+    # (refresh, domains, hosts, balance, and availability, which buys nothing) are asked by anyone.
+    PAGE_ONLY_HOOKS = ("set_record", "remove_record", "ddns_update")
     keys = KEYS
     signup = "https://www.namecheap.com/support/api/intro/"
     limits = ("Namecheap's API: about 20 requests a minute, 700 an hour and 8,000 a day per key (the lower kept); "
