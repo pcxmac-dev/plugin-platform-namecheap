@@ -18,7 +18,9 @@ refused, and the platform asks its login whether you are at the page. Before, an
 platform with a header anyone can send, and the API key did the rest; the second confirmation is an argument the asker
 sets. Whether a name is free is the page's too (0.3.5, the user's choice of 2026-11-25): it sends names of the asker's
 choosing to Namecheap under your API key. Its other reads are asked only from its page too since 0.3.7 (`present` and `status` by anyone) (the account, a domain's records, the
-balance). The background and the command line call the same code themselves: those are not asks.
+balance). The background and the command line call the same code themselves: those are not asks. Since 0.3.8 a status
+another plugin asks (the MCP plugin's, for an agent you granted it) holds none of what those reads return: no balance,
+no domains or records, no tables.
 
     python -m plugin_platform_namecheap ip | status | domains | hosts DOMAIN | set DOMAIN HOST TYPE ADDRESS [--ttl N] [--mx N]
         | remove DOMAIN HOST TYPE [ADDRESS] | restore DOMAIN FILE | backups [DOMAIN] | check NAME... | balance | ddns [--now]
@@ -33,6 +35,11 @@ from pathlib import Path
 
 from liminal_libs.machines.plugin import MachinePlugin
 
+try:  # who asks a hook, handed over in so many words (liminal-libs 1.66.0's apps/asking.py)
+    from liminal_libs.apps import asking
+except ImportError:  # an older library hands no one over: every status is its page's, as before
+    asking = None
+
 from . import apis as cards
 from . import ddns
 from . import settings as settings_mod
@@ -40,7 +47,7 @@ from . import zone as zones
 from .api import CHECK_MAX, LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
 from .settings import API_KEY, API_USER, DDNS_HOSTS, DDNS_PASSWORD, KEYS, NAMES, Config
 
-__version__ = "0.3.7"
+__version__ = "0.3.8"
 REFRESH_S = 900.0  # the account read again at most this often while attached (or by Refresh)
 CONFIG_S = 30.0  # the settings asked of the login again after this long
 RETRY_S = 900.0  # a part that failed is taken as untried after this long while detached: attached again, it is tried again
@@ -64,7 +71,21 @@ TYPES = {  # the record types the page's form sets (zone.WRITABLE), in the order
     "URL301": "a permanent redirect (301) to an http or https address; replaces the host's",
     "FRAME": "a masked redirect (the address shown in a frame); replaces the host's",
 }
+# what a status another plugin asks says in place of the account's reads (0.3.8)
+LISTS_WORDS = ("the domains, their records and the balance are shown on its page alone (read with the account's key: "
+               "domains, hosts and balance are its page's)")
 ACCEPT = "accept_ddns_reset"  # the hooks' argument accepting a write over Dynamic DNS hosts (zone.Refusal's accept)
+
+
+def for_its_page() -> bool:
+    """Whether the status being answered is its page's (0.3.8; Liminal's complete review, item 14's P2-2): asked from
+    the page (asking.PAGE) or naming no one. Another plugin's ask is not: the MCP plugin's, for an agent you granted
+    this status, or any plugin's through the app. It gets the status without what only the page asks (domains, hosts,
+    balance: read with the account's key; the user, 2026-11-26, "Page-only"). A status that names no one stays whole:
+    liminal-platform 0.42.1 draws the plugin's page from GET /api/machines/namecheap, which asks it naming no one, so
+    the page cannot be told from it here until the platform names its page there."""
+    who = asking.asker() if asking is not None else None
+    return who is None or who == asking.PAGE
 
 
 def mail_of(email_type: str | None) -> str:
@@ -177,7 +198,8 @@ class NamecheapPlugin(MachinePlugin):
     # every hook a plugin declares for no one, and the user, 2026-11-26, chose "Page-only" for these): each sends
     # requests as you and returns what the account holds, so another plugin's ask and an ask that names no one are
     # refused, and the platform asks its login whether you are at the page. `present` and `status` stay anyone's
-    # (MachinePlugin's reads).
+    # (MachinePlugin's reads); a status another plugin asks holds none of what those reads return (0.3.8:
+    # for_its_page).
     PAGE_ONLY_HOOKS = (*PAGE_ONLY_HOOKS, "refresh", "domains", "hosts", "balance")
     keys = KEYS
     signup = "https://www.namecheap.com/support/api/intro/"
@@ -505,6 +527,7 @@ class NamecheapPlugin(MachinePlugin):
             return {"present": False, "valid": False, "why": NOT_SET, "summary": "not set up", "settingsNotSet": ", ".join(NAMES),
                     "tables": [], "actions": [], "forms": []}
         rt, now, attached = self._rt, self._clock(), self.app is not None
+        whole = for_its_page()  # another plugin's ask: what the account's reads hold left out (0.3.8)
         with rt.lock:
             domains, balance, read = list(rt.domains or []), rt.balance, dict(rt.zones)
             refreshed_at, api_ok, api_error, api_error_at = rt.refreshed_at, rt.api_ok, rt.api_error, rt.api_error_at
@@ -527,7 +550,8 @@ class NamecheapPlugin(MachinePlugin):
         troubles = [f"{'the API' if p == 'api' else 'Dynamic DNS'}: {t}" for p, w, t in parts if w is False]
         notes = [*cfg.incomplete, *cfg.problems, *wrong]
         valid = any(w is not False for _, w, _ in parts)
-        out: dict = {"present": True, "valid": valid, "summary": self._summary(cfg, parts, domains, balance, hosts, states, attached)}
+        out: dict = {"present": True, "valid": valid,
+                     "summary": self._summary(cfg, parts, domains, balance, hosts, states, attached, whole)}
         if not valid:
             out["why"] = "; ".join(troubles or notes) or NOT_SET
         elif troubles or notes:
@@ -541,7 +565,7 @@ class NamecheapPlugin(MachinePlugin):
         if cfg.api_ready:
             out["clientIp"] = ("as set (NAMECHEAP_CLIENT_IP)" if cfg.client_ip else
                                f"{public}, this network's" if public else "this network's address, once found")
-        if balance and not balance.get("error"):
+        if whole and balance and not balance.get("error"):
             out["balance"] = f"{balance.get('available')} {balance.get('currency')}".strip()
             try:
                 if float(balance.get("autoRenew") or 0) > 0:
@@ -555,6 +579,9 @@ class NamecheapPlugin(MachinePlugin):
         if cfg.ddns_ready:
             out["ddnsEvery"] = f"every {cfg.minutes:g} min" + ("" if attached else ", once attached")
         out["backups"] = str(self.folder)
+        if not whole:  # no domain, record or balance, nor the page's forms and actions (0.3.8)
+            out.update({"tables": [], "forms": [], "actions": [], "lists": LISTS_WORDS})
+            return out
         out["tables"] = self._tables(cfg, domains, read, hosts, states, public)
         out["forms"] = [f for name in sorted(read) if self._writable(cfg, read[name]) for f in self._forms(read[name])]
         if cfg.ddns_ready:  # Update DNS now, confirmed first (0.3.1: it sent on one click)
@@ -572,12 +599,15 @@ class NamecheapPlugin(MachinePlugin):
                          ([{"form": "ddns-now", "title": "Update DNS now"}] if cfg.ddns_ready else [])
         return out
 
-    def _summary(self, cfg, parts, domains, balance, hosts, states, attached) -> str:
+    def _summary(self, cfg, parts, domains, balance, hosts, states, attached, whole=True) -> str:
+        """The status' summary. Not `whole` (another plugin's ask, 0.3.8): no domain count, balance or host named."""
         works = dict((p, w) for p, w, _ in parts)
         errors = dict((p, t) for p, _, t in parts)
         bits = []
         if cfg.api_ready:
-            if works.get("api") is True:
+            if works.get("api") is True and not whole:
+                bits.append("the account read: its domains, records and balance are on its page")
+            elif works.get("api") is True:
                 money = f"{balance.get('available')} {balance.get('currency')}" if balance and not balance.get("error") else ""
                 bits.append(plural(len(domains), "domain") + (f" · {money}" if money else ""))
             elif works.get("api") is None:
@@ -586,7 +616,7 @@ class NamecheapPlugin(MachinePlugin):
                 bits.append(f"the API: {shorten(errors.get('api') or 'failed', 100)}")
         if cfg.ddns_ready:
             mine = [states[h.fqdn.lower()] for h in hosts if h.fqdn.lower() in states]
-            if len(hosts) == 1 and mine and mine[0].ok:
+            if whole and len(hosts) == 1 and mine and mine[0].ok:
                 bits.append(f"{mine[0].fqdn} at {mine[0].address}")
             elif any(s.ok is not None for s in mine):
                 bits.append(f"Dynamic DNS: {sum(1 for s in mine if s.ok)} of {plural(len(hosts), 'host')} current")

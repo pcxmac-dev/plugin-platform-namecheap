@@ -7,7 +7,8 @@ asks its login whether you are at the page. Before, any program on this PC asked
 anyone can send, and the API key did the rest: the domain itself pointed at an address of the asker's, its SPF record
 removed, each with no second question (the one there is, for a zone with Dynamic DNS hosts, is only an argument). Its
 reads are asked only from its page too since 0.3.7 (closed by default: the account's key makes them; `present` and
-`status` alone are anyone's): the account, a domain's records and the balance. Asked through the library's own
+`status` alone are anyone's): the account, a domain's records and the balance. A status another plugin asks holds none
+of those (0.3.8). Asked through the library's own
 App (its ask names who asks as the platform's does), over the stand-in Namecheap and the stand-in resolver: nothing
 reaches Namecheap, a resolver or the network."""
 from __future__ import annotations
@@ -180,3 +181,27 @@ def test_no_hook_is_left_undeclared():
     assert not set(PAGE_READS) & set(internal.declared(MACHINE, "READ_HOOKS"))  # none is opened again as a read
     warnings = getattr(conformance, "warnings", None)  # liminal-libs 1.107.0
     assert warnings is None or warnings(MACHINE) == []
+
+
+def test_a_status_another_plugin_asks_holds_no_domain_record_or_balance_and_its_page_s_holds_them_all(attached):
+    """0.3.8 (Liminal's complete review, item 14's P2-2): status is anyone's, but another plugin's ask of it (the MCP
+    plugin's, for an agent you granted it) gets no balance, no domain and no zone's records, no table, form or action:
+    what domains, hosts and balance refuse it. Nothing is sent for it. Its page's status holds them all, and so does
+    one naming no one: the platform (0.42.1) draws the page from GET /api/machines/namecheap, which names no one."""
+    app, plugin, neighbour, fake = attached
+    assert app.from_page("refresh")["domains"] == 2  # the account read, as its page reads it
+    app.from_page("ddns_update")
+    whole = app.from_page("status")
+    assert whole["balance"] and whole["tables"] and whole["forms"] and whole["actions"] and "lists" not in whole
+    shown = repr(whole)
+    secret = [whole["balance"].split()[0], "hypokrites.me", "example.net", "protonmail"]
+    assert all(s in shown for s in secret)
+    sent = len(fake.requests)
+    told = neighbour.wants("status")
+    assert told["present"] is True and told["valid"] is True and "on its page alone" in told["lists"]
+    assert told["tables"] == [] and told["forms"] == [] and told["actions"] == [] and "balance" not in told
+    said = repr(told)
+    assert [s for s in secret if s in said] == []  # no balance, domain (nor a host of one) or record
+    assert "its page" in told["summary"] and len(fake.requests) == sent  # nothing sent to answer it
+    assert app.on_its_own("status")["tables"] == whole["tables"]  # naming no one: the platform's page, today
+

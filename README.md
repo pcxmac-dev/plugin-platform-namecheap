@@ -128,7 +128,12 @@ quarter of an hour later (the platform attaches it again and it is tried again),
 that you are at the page (liminal-libs 1.66.0 and liminal-platform 0.34.0 read the word; what is older than those asks
 them as before). So is `availability(*names)` since 0.3.5: it buys nothing, yet it sends names of the asker's choosing
 to Namecheap under your API key; and `check_names(names)`, the same ask from the page's form, since 0.3.6. `present` and `status` are asked by anyone. From 0.3.7 `refresh()` and every other read is asked only from the page too (`refresh`, `domains`, `hosts`, `balance`): each is made with the account's key. The plugin's own background (its reads, its Dynamic DNS checks) and its command
-line call the code themselves: they are not asks. The platform's check rests on its login's word that your browser is
+line call the code themselves: they are not asks. Since 0.3.8 a `status` another plugin asks (the MCP plugin's, for an
+agent you granted it, or any plugin's through the app) holds none of what those reads return: no balance, no domain,
+no zone's records, none of the page's tables, forms or actions, and a summary that names no domain or host; a `lists`
+line says where they are. The page's status holds them all. A status that names no one is whole too, since
+liminal-platform 0.42.1 draws the page from `GET /api/machines/namecheap`, which names no one: a program on this PC
+reading that route still sees them until the platform names its page there. The platform's check rests on its login's word that your browser is
 signed in, and a local login signs `secret` and `default` in with no password: it does not stop a program on this PC
 that signs itself in.
 

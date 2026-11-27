@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.8 (2026-11-26)
+
+A status another plugin asks no longer hands out what the account's reads return: Liminal's complete review
+(Monday-list item 14, finding P2-2). 0.3.7 made `refresh`, `domains`, `hosts` and `balance` page-only (the user,
+2026-11-26: "Page-only"), yet `status`, which anyone may ask and the MCP plugin hands to an agent you granted it, still
+carried the balance, the domains table and every zone's records as last read.
+
+- **Another plugin's `status`** (the asker the library hands over, `asking.asker()`, names a plugin): no balance, no
+  tables, forms or actions, and a summary that names no domain count, balance or Dynamic DNS host; a `lists` line says
+  the domains, records and balance are on its page alone. Whether it is set up and works, which settings are set, the
+  API's use and the backups folder stay. `status` stays open to anyone, and still sends nothing to answer.
+- **The page's `status`** (asked as `asking.PAGE`) holds everything, as before. So does a status that names no one:
+  liminal-platform 0.42.1 draws the page from `GET /api/machines/namecheap`, which asks it naming no one, so the page
+  cannot be told apart there. A program on this PC reading that route still gets them until the platform names its
+  page on that route; this plugin then needs one word changed (`for_its_page`).
+- On a library older than 1.66.0, which hands no asker over, every status is whole, as before.
+
+Tests: after the page's Refresh and Dynamic DNS pass, another plugin's status holds no balance, domain, host or
+record and sends nothing; the page's holds them all, and so does one naming no one. They fail when the status is whole
+for every asker, and when only the summary is. No new requirement.
+
 ## 0.3.7 (2026-11-26)
 
 Its reads made with the account's key are asked only from the page too. The user, 2026-11-26: "Yes, closed by
