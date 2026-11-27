@@ -17,7 +17,7 @@ record set or removed and a Dynamic DNS pass are asked only from its page (PAGE_
 refused, and the platform asks its login whether you are at the page. Before, any program on this PC could ask them of the
 platform with a header anyone can send, and the API key did the rest; the second confirmation is an argument the asker
 sets. Whether a name is free is the page's too (0.3.5, the user's choice of 2026-11-25): it sends names of the asker's
-choosing to Namecheap under your API key. Its other reads are asked by anyone (the account, a domain's records, the
+choosing to Namecheap under your API key. Its other reads are asked only from its page too since 0.3.7 (`present` and `status` by anyone) (the account, a domain's records, the
 balance). The background and the command line call the same code themselves: those are not asks.
 
     python -m plugin_platform_namecheap ip | status | domains | hosts DOMAIN | set DOMAIN HOST TYPE ADDRESS [--ttl N] [--mx N]
@@ -40,7 +40,7 @@ from . import zone as zones
 from .api import CHECK_MAX, LIMITER, TTL_DEFAULT, TTL_MAX, TTL_MIN, NamecheapApi, NamecheapError, Zone, shorten
 from .settings import API_KEY, API_USER, DDNS_HOSTS, DDNS_PASSWORD, KEYS, NAMES, Config
 
-__version__ = "0.3.6"
+__version__ = "0.3.7"
 REFRESH_S = 900.0  # the account read again at most this often while attached (or by Refresh)
 CONFIG_S = 30.0  # the settings asked of the login again after this long
 RETRY_S = 900.0  # a part that failed is taken as untried after this long while detached: attached again, it is tried again
@@ -170,9 +170,15 @@ class NamecheapPlugin(MachinePlugin):
     # background's reads and Dynamic DNS passes and the command line call the code directly, not through an ask.
     # availability is the page's too (0.3.5, the user's choice of 2026-11-25, "Root reads and Namecheap"): it buys
     # nothing, yet it sends names of the asker's choosing to Namecheap under your API key, up to 50 an ask, each a call
-    # of the account's. Its other reads (refresh, domains, hosts, balance) are asked by anyone.
+    # of the account's. Its other reads (refresh, domains, hosts, balance) are asked only from its page too since 0.3.7 (`present` and `status` by anyone).
     # check_names (0.3.6) is availability as the page's "Check a name" form asks it: the page's alone, the same way.
     PAGE_ONLY_HOOKS = ("set_record", "remove_record", "ddns_update", "availability", "check_names")
+    # Its reads made with the account's key, asked only from its page too (0.3.7; liminal-libs 1.107.0 closes
+    # every hook a plugin declares for no one, and the user, 2026-11-26, chose "Page-only" for these): each sends
+    # requests as you and returns what the account holds, so another plugin's ask and an ask that names no one are
+    # refused, and the platform asks its login whether you are at the page. `present` and `status` stay anyone's
+    # (MachinePlugin's reads).
+    PAGE_ONLY_HOOKS = (*PAGE_ONLY_HOOKS, "refresh", "domains", "hosts", "balance")
     keys = KEYS
     signup = "https://www.namecheap.com/support/api/intro/"
     limits = ("Namecheap's API: about 20 requests a minute, 700 an hour and 8,000 a day per key (the lower kept); "

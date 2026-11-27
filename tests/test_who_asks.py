@@ -6,7 +6,8 @@ and a Dynamic DNS pass. Another plugin's ask is refused, and so is an ask that n
 asks its login whether you are at the page. Before, any program on this PC asked them of the platform with a header
 anyone can send, and the API key did the rest: the domain itself pointed at an address of the asker's, its SPF record
 removed, each with no second question (the one there is, for a zone with Dynamic DNS hosts, is only an argument). Its
-reads are asked by anyone, as before: the account, a domain's records and the balance. Asked through the library's own
+reads are asked only from its page too since 0.3.7 (closed by default: the account's key makes them; `present` and
+`status` alone are anyone's): the account, a domain's records and the balance. Asked through the library's own
 App (its ask names who asks as the platform's does), over the stand-in Namecheap and the stand-in resolver: nothing
 reaches Namecheap, a resolver or the network."""
 from __future__ import annotations
@@ -24,6 +25,11 @@ from plugin_platform_namecheap import MACHINE  # noqa: E402
 CHANGES = ("set_record", "remove_record", "ddns_update")
 SENT_FOR_ANYONE = ("availability", "check_names")  # check_names: the page's Check a name form (0.3.6)  # a read that sends the asker's words to Namecheap: the page's alone since 0.3.5
 READS = ("present", "status", "refresh", "domains", "hosts", "balance")
+# 0.3.7, closed by default (the user, 2026-11-26: "Page-only"): the reads made with the account's key are its
+# page's alone too; the contract's own two stay anyone's
+OPEN_READS = ("present", "status")
+PAGE_READS = tuple(h for h in READS if h not in OPEN_READS)
+READ_ARGS = {'hosts': ('hypokrites.me',)}  # the argument a read takes, as another program words it
 SET_HOSTS = "namecheap.domains.dns.setHosts"  # the one command that writes a zone (all of it)
 ASKED = {  # each change as another program worded it: the hook's arguments
     "set_record": ("hypokrites.me", "@", "A", "203.0.113.99"),  # the domain itself, pointed at an address of the asker's
@@ -82,8 +88,8 @@ def attached(made):
     app.detach(plugin.name)
 
 
-def test_its_changes_are_said_to_be_asked_only_from_its_page_and_its_reads_by_anyone():
-    assert set(internal.page_only(MACHINE)) == {*CHANGES, *SENT_FOR_ANYONE}  # what the platform reads
+def test_its_changes_are_said_to_be_asked_only_from_its_page_and_its_reads_with_the_key_too():
+    assert set(internal.page_only(MACHINE)) == {*CHANGES, *SENT_FOR_ANYONE, *PAGE_READS}  # what the platform reads
     assert internal.plugin_only(MACHINE) == ()
     assert internal.problems(MACHINE) == []  # each a hook of its own, and someone may ask it
     assert {*CHANGES, *SENT_FOR_ANYONE, *READS} == set(MACHINE.interface()["hooks"]) and set(ASKED) == set(CHANGES)
@@ -92,7 +98,12 @@ def test_its_changes_are_said_to_be_asked_only_from_its_page_and_its_reads_by_an
         assert asking.refusal(MACHINE, hook, "neighbour") == (f"namecheap's {hook} is asked only from its page, "
                                                               "never by another plugin: neighbour asked it.")
         assert asking.refusal(MACHINE, hook, None).endswith("This ask names no asker: neither the page nor a plugin.")
-    for hook in READS:
+    for hook in PAGE_READS:  # 0.3.7
+        assert asking.refusal(MACHINE, hook, asking.PAGE) == ""
+        assert asking.refusal(MACHINE, hook, "neighbour") == (f"namecheap's {hook} is asked only from its page, "
+                                                              "never by another plugin: neighbour asked it.")
+        assert asking.refusal(MACHINE, hook, None).endswith("This ask names no asker: neither the page nor a plugin.")
+    for hook in OPEN_READS:
         assert {asking.refusal(MACHINE, hook, who) for who in (asking.PAGE, "neighbour", None)} == {""}
 
 
@@ -102,11 +113,15 @@ def test_another_plugin_or_no_one_asking_a_change_sends_nothing_and_its_page_doe
         for ask in (neighbour.wants, app.on_its_own):
             with pytest.raises(asking.AskRefused, match=f"namecheap's {hook} is asked only from its page"):
                 ask(hook, *ASKED[hook])
+    for hook in PAGE_READS:  # 0.3.7: a read made with the key is refused them too, and nothing is sent for it
+        for ask in (neighbour.wants, app.on_its_own):
+            with pytest.raises(asking.AskRefused, match=f"namecheap's {hook} is asked only from its page"):
+                ask(hook, *READ_ARGS.get(hook, ()))
     assert fake.requests == [] and fake.ddns_records == {}  # nothing sent, nor read: not the read a change makes first
-    assert neighbour.wants("present") is True and neighbour.wants("status")["valid"] is True  # its reads, as before
-    assert [d["name"] for d in neighbour.wants("domains")] == ["hypokrites.me", "example.net"]
-    assert len(neighbour.wants("hosts", "hypokrites.me")["records"]) == 7 and neighbour.wants("balance") is not None
-    assert app.on_its_own("refresh")["domains"] == 2 and writes(fake) == []
+    assert neighbour.wants("present") is True and neighbour.wants("status")["valid"] is True  # the contract's reads, anyone's as before
+    assert [d["name"] for d in app.from_page("domains")] == ["hypokrites.me", "example.net"]
+    assert len(app.from_page("hosts", "hypokrites.me")["records"]) == 7 and app.from_page("balance") is not None
+    assert app.from_page("refresh")["domains"] == 2 and writes(fake) == []
     for hook in CHANGES:  # the same asks from its page: each one sent
         sent = len(writes(fake))
         assert app.from_page(hook, *ASKED[hook]) is not None
@@ -150,3 +165,18 @@ def test_its_own_code_asks_nothing_of_the_app_and_runs_as_before(attached):
     (home,) = plugin.ddns_update(force=False)
     assert home["host"] == "home.hypokrites.me" and writes(fake) == ["a Dynamic DNS update"]
     assert fake.ddns_records == {"home.hypokrites.me": HOME}
+
+
+def test_no_hook_is_left_undeclared():
+    """0.3.7, closed by default (liminal-libs 1.107.0): every hook it answers says who may ask it, so none is left to
+    the default and the library's conformance has no warning. Read from its words, so it holds on an older library."""
+    from liminal_libs.sources import conformance
+
+    said = {h for word in ("READ_HOOKS", "SERVICE_HOOKS", "PLUGIN_ONLY_HOOKS", "PAGE_ONLY_HOOKS")
+            for h in internal.declared(MACHINE, word)}
+    own = [h for h in MACHINE.interface()["hooks"] if h not in ("setup", "run", "scan")]
+    assert own and [h for h in own if h not in said] == []
+    assert set(PAGE_READS) <= set(internal.declared(MACHINE, "PAGE_ONLY_HOOKS"))
+    assert not set(PAGE_READS) & set(internal.declared(MACHINE, "READ_HOOKS"))  # none is opened again as a read
+    warnings = getattr(conformance, "warnings", None)  # liminal-libs 1.107.0
+    assert warnings is None or warnings(MACHINE) == []
